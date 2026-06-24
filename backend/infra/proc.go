@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/narcilee7/aland/backend/core"
 	"github.com/narcilee7/aland/backend/tribes"
 )
 
@@ -65,7 +66,12 @@ func (p *ProcManager) scanOnce() {
 			continue
 		}
 		proc, err := det.DetectProcess()
-		if err != nil || proc == nil {
+		if err != nil {
+			core.Log.Warn("detect process failed", "tribe", id, "err", err)
+			tribe.SetVital(tribes.VitalSign{PID: 0})
+			continue
+		}
+		if proc == nil {
 			tribe.SetVital(tribes.VitalSign{PID: 0})
 			continue
 		}

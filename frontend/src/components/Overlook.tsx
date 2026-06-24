@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAland } from '../stores/alandStore'
 import { hitTest, renderLand, type Camera } from '../canvas/IsometricEngine'
 import { DEFAULT_PLACEMENTS } from '../canvas/layouts'
-import { Badge, Button } from './ui'
+import { Badge, Button, Tooltip, TooltipContent, TooltipTrigger } from './ui'
 
 export function Overlook() {
   const tribes = useAland(s => s.tribes)
@@ -103,9 +103,16 @@ export function Overlook() {
             } as React.CSSProperties
           }
         >
-          <Button onClick={onClick} variant="default" size="md">
-            {meta[hover].name} · click to enter →
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={onClick} variant="default" size="md">
+                {meta[hover].name} · click to enter →
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              按 <kbd className="rounded bg-white/10 px-1">⌘⇧A</kbd> 随时唤起 Spotlight
+            </TooltipContent>
+          </Tooltip>
         </div>
       )}
 

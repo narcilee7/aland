@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/narcilee7/aland/backend/core"
+	"github.com/narcilee7/aland/backend/events"
 )
 
-// FSWatch 监听配置文件变更，通过 Wails Event 推送到前端。
+// FSWatch 监听配置文件变更，通过 events.Emitter 推送到前端。
 // 防抖 500ms，避免编辑器保存时的多事件。
 type FSWatch struct {
 	watcher  *fsnotify.Watcher
+	emitter  *events.Emitter
 	ctx      context.Context
 	paths    []string
 	debounce time.Duration
@@ -21,6 +23,7 @@ type FSWatch struct {
 
 func NewFSWatch(ctx context.Context, paths []string) *FSWatch {
 	return &FSWatch{
+		emitter:  events.New(ctx),
 		ctx:      ctx,
 		paths:    paths,
 		debounce: 500 * time.Millisecond,
@@ -42,10 +45,13 @@ func (f *FSWatch) Start() error {
 		if watched[dir] {
 			continue
 		}
-		if err := w.Add(dir); err == nil {
-			watched[dir] = true
+		if err := w.Add(dir); err != nil {
+			core.Log.Warn("fs watch add failed", "dir", dir, "err", err)
+			continue
 		}
+		watched[dir] = true
 	}
+	core.Log.Info("fs watch started", "paths", len(f.paths))
 
 	go f.loop()
 	return nil
@@ -69,14 +75,12 @@ func (f *FSWatch) loop() {
 				continue
 			}
 			lastEmit = now
-			runtime.EventsEmit(f.ctx, "fs:change", map[string]string{
-				"path": ev.Name,
-				"op":   ev.Op.String(),
-			})
-		case _, ok := <-f.watcher.Errors:
+			f.emitter.EmitFSChange(ev.Name, ev.Op.String())
+		case err, ok := <-f.watcher.Errors:
 			if !ok {
 				return
 			}
+			core.Log.Warn("fs watch error", "err", err)
 		}
 	}
 }

@@ -1,6 +1,7 @@
 // 与 Wails 后端的类型化 API 包装。
 // 后端方法在 backend/app.go 中以大写开头，前端通过 window.go.main.App 调用。
 // 这里手写类型是因为 Wails 自动生成的 .d.ts 在 dev 跑之前不存在。
+// 事件订阅统一搬到 ./events.ts。
 
 import type {EventsOn} from '../../wailsjs/runtime/runtime'
 
@@ -88,19 +89,4 @@ export async function getTribeMeta(id: string): Promise<TribeMeta | null> {
   } catch {
     return null
   }
-}
-
-export function onTribeVital(cb: (snapshot: Record<string, Tribe>) => void) {
-  if (!wailsAvailable()) return () => {}
-  return window.runtime.EventsOn('tribe:vital', cb)
-}
-
-export function onTribeBorn(cb: (e: {id: string; pid: number; name: string}) => void) {
-  if (!wailsAvailable()) return () => {}
-  return window.runtime.EventsOn('tribe:born', cb)
-}
-
-export function onTribeDeath(cb: (e: {id: string; pid: number; name: string}) => void) {
-  if (!wailsAvailable()) return () => {}
-  return window.runtime.EventsOn('tribe:death', cb)
 }

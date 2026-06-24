@@ -1,6 +1,6 @@
 // Package backend 是 Wails 绑定到前端的根层。
 // 它把 tribes.Land / infra.ProcManager / infra.FSWatch 串起来，
-// 并把状态变化通过 Wails Event 推给前端。
+// 并把状态变化通过 events.Emitter 推给前端。
 package backend
 
 import (
@@ -10,16 +10,17 @@ import (
 	"time"
 
 	"github.com/narcilee7/aland/backend/core"
+	"github.com/narcilee7/aland/backend/events"
+	"github.com/narcilee7/aland/backend/hotkey"
 	"github.com/narcilee7/aland/backend/infra"
 	"github.com/narcilee7/aland/backend/tribes"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App 是绑定到前端的根对象。
 // 前端通过 window.go.main.App 调用其导出的方法。
 type App struct {
 	ctx context.Context
+	em  *events.Emitter
 
 	land  *tribes.Land
 	forge *core.Forge
@@ -49,6 +50,9 @@ func NewApp() (*App, error) {
 // Startup Wails 启动回调。
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.em = events.New(ctx)
+
+	core.Log.Info("aland starting", "tribes", a.land.IDs())
 
 	// 启动进程扫描
 	a.proc = infra.NewProcManager(a.land)
@@ -58,6 +62,11 @@ func (a *App) Startup(ctx context.Context) {
 	paths := a.collectConfigPaths()
 	a.fs = infra.NewFSWatch(ctx, paths)
 	_ = a.fs.Start()
+
+	// 注册全局快捷键 Cmd+Shift+A → 唤起 Spotlight
+	if err := hotkey.CmdShiftA(ctx, a.em); err != nil {
+		core.Log.Warn("hotkey register failed", "err", err)
+	}
 
 	// 周期把生命体征推给前端 + 检测 born/death
 	go a.vitalLoop(ctx)
@@ -85,31 +94,23 @@ func (a *App) vitalLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			snap := a.land.Snapshot()
-			runtime.EventsEmit(ctx, "tribe:vital", snap)
-			a.detectBornDeath(ctx, snap)
+			a.em.EmitTribeVital(snap)
+			a.detectBornDeath(snap)
 		}
 	}
 }
 
-func (a *App) detectBornDeath(ctx context.Context, snap map[string]tribes.Tribe) {
+func (a *App) detectBornDeath(snap map[string]tribes.Tribe) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for id, t := range snap {
 		prev, ok := a.prev[id]
 		cur := t.Vital.PID
 		if !ok && cur > 0 {
-			runtime.EventsEmit(ctx, "tribe:born", map[string]any{
-				"id":   id,
-				"pid":  cur,
-				"name": t.Meta.Name,
-			})
+			a.em.EmitTribeBorn(id, cur, t.Meta.Name)
 		}
 		if ok && prev > 0 && cur == 0 {
-			runtime.EventsEmit(ctx, "tribe:death", map[string]any{
-				"id":   id,
-				"pid":  prev,
-				"name": t.Meta.Name,
-			})
+			a.em.EmitTribeDeath(id, prev, t.Meta.Name)
 		}
 		a.prev[id] = cur
 	}
@@ -141,6 +142,7 @@ func (a *App) LaunchTribe(id, cwd string, args []string) error {
 	if !ok {
 		return fmt.Errorf("tribe %s has no launcher", id)
 	}
+	core.Log.Info("launch tribe", "tribe", id, "cwd", cwd)
 	return la.Launch(cwd, args)
 }
 
@@ -154,7 +156,9 @@ func (a *App) KillTribe(id string) error {
 	if !ok {
 		return fmt.Errorf("tribe %s has no launcher", id)
 	}
-	return la.Kill(t.GetVital().PID)
+	pid := t.GetVital().PID
+	core.Log.Info("kill tribe", "tribe", id, "pid", pid)
+	return la.Kill(pid)
 }
 
 // ReadTribeConfig 读取部落配置。

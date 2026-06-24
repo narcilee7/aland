@@ -1,10 +1,11 @@
 module github.com/narcilee7/aland
 
-go 1.23.0
+go 1.24
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/wailsapp/wails/v2 v2.12.0
+	golang.design/x/hotkey v0.6.1
 )
 
 require (
