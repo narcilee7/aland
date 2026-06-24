@@ -30,7 +30,17 @@ type Reader interface {
 	ParseConfig() (map[string]interface{}, error)
 }
 
-// TokenStatReader Token 消耗解析能力（v1 阶段实现）。
+// TokenStatReader Token 消耗解析能力。Forge 持有，刷新熔炉液面。
 type TokenStatReader interface {
 	ParseTokenUsage() (*TokenUsage, error)
+}
+
+// SessionLister 历史会话列表能力。TribeView 持有，渲染记忆碎片。
+type SessionLister interface {
+	ParseSessions() ([]SessionShard, error)
+}
+
+// ConfigParser 三层结构化配置解析。TribeView 持有，渲染 Config DNA。
+type ConfigParser interface {
+	ParseConfigDNA() (ConfigDNA, error)
 }

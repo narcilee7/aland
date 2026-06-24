@@ -170,9 +170,52 @@ func (a *App) ReadTribeConfig(id string) (map[string]any, error) {
 	return r.ParseConfig()
 }
 
-// GetForge 读取 Token 熔炉状态（M0 占位）。
+// ReadTribeConfigDNA 读取三层结构化配置。
+func (a *App) ReadTribeConfigDNA(id string) (tribes.ConfigDNA, error) {
+	cp, ok := a.land.ConfigParse(id)
+	if !ok {
+		return tribes.ConfigDNA{}, fmt.Errorf("tribe %s has no config parser", id)
+	}
+	return cp.ParseConfigDNA()
+}
+
+// GetForge 读取 Token 熔炉状态。
+// 实现：聚合所有部落有 TokenStatReader 能力的输出。
 func (a *App) GetForge() core.Forge {
-	return a.forge.Snapshot()
+	byTribe := map[string]int64{}
+	byModel := map[string]int64{}
+	var total int64
+	for _, id := range a.land.IDs() {
+		ts, ok := a.land.TokenStat(id)
+		if !ok {
+			continue
+		}
+		usage, err := ts.ParseTokenUsage()
+		if err != nil || usage == nil {
+			continue
+		}
+		sum := usage.InputTokens + usage.OutputTokens
+		byTribe[id] = sum
+		total += sum
+		if usage.Model != "" {
+			byModel[usage.Model] += sum
+		}
+	}
+	return core.Forge{
+		TodaySpent:  total,
+		ByTribe:     byTribe,
+		ByModel:     byModel,
+		DailyBudget: a.forge.DailyBudget,
+	}
+}
+
+// ListSessions 列出某部落的全部会话（记忆碎片）。
+func (a *App) ListSessions(id string) ([]tribes.SessionShard, error) {
+	sl, ok := a.land.Sessions(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no session lister", id)
+	}
+	return sl.ParseSessions()
 }
 
 // GetTribeMeta 返回部落元信息（前端用来渲染地形）。

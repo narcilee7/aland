@@ -34,3 +34,37 @@ type Meta struct {
 	ThemeColor  string `json:"themeColor"`
 	AccentColor string `json:"accentColor"`
 }
+
+// SessionShard 一个历史会话（"记忆碎片"）。
+type SessionShard struct {
+	ID           string `json:"id"`
+	Tribe        string `json:"tribe"`
+	Timestamp    int64  `json:"timestamp"`   // unix ms
+	MessageCount int    `json:"messageCount"`
+	TokenCount   int64  `json:"tokenCount"`
+	Model        string `json:"model"`
+	CWD          string `json:"cwd"`
+	Project      string `json:"project"` // 解码后的项目路径
+	FilePath     string `json:"filePath"`
+	SizeBytes    int64  `json:"sizeBytes"`
+	Summary      string `json:"summary"` // ai-title 或首条 user 消息
+}
+
+// ConfigItem 一个配置项。Sensitive=true 表示 API Key 等，UI 要走锁芯。
+type ConfigItem struct {
+	Key       string `json:"key"`
+	Value     any    `json:"value"`
+	DefaultV  any    `json:"defaultValue,omitempty"`
+	Type      string `json:"type"` // string | number | boolean | json
+	Layer     string `json:"layer"`
+	Sensitive bool   `json:"sensitive,omitempty"`
+}
+
+// ConfigDNA 三层配置：surface（运行时） / middle（API & 权限） / deep（其他）。
+// 来源标识 Source 用于 UI 展示"配置自哪"。
+type ConfigDNA struct {
+	Source  string       `json:"source"`
+	Surface []ConfigItem `json:"surface"`
+	Middle  []ConfigItem `json:"middle"`
+	Deep    []ConfigItem `json:"deep"`
+}

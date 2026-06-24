@@ -71,20 +71,26 @@ func (t *Tribe) GetVital() VitalSign {
 // Land 大陆——所有部落的容器。
 // 按能力分别保存适配器引用，让消费方通过类型安全的接口取用。
 type Land struct {
-	mu        sync.RWMutex
-	tribes    map[string]*Tribe
-	detectors map[string]Detector
-	launchers map[string]Launcher
-	readers   map[string]Reader
+	mu          sync.RWMutex
+	tribes      map[string]*Tribe
+	detectors   map[string]Detector
+	launchers   map[string]Launcher
+	readers     map[string]Reader
+	tokenStats  map[string]TokenStatReader
+	sessions    map[string]SessionLister
+	configParse map[string]ConfigParser
 }
 
 // NewLand 构造一片空大陆。
 func NewLand() *Land {
 	return &Land{
-		tribes:    make(map[string]*Tribe),
-		detectors: make(map[string]Detector),
-		launchers: make(map[string]Launcher),
-		readers:   make(map[string]Reader),
+		tribes:      make(map[string]*Tribe),
+		detectors:   make(map[string]Detector),
+		launchers:   make(map[string]Launcher),
+		readers:     make(map[string]Reader),
+		tokenStats:  make(map[string]TokenStatReader),
+		sessions:    make(map[string]SessionLister),
+		configParse: make(map[string]ConfigParser),
 	}
 }
 
@@ -117,7 +123,40 @@ func (l *Land) Register(adapter any) error {
 	if r, ok := adapter.(Reader); ok {
 		l.readers[m.ID] = r
 	}
+	if t, ok := adapter.(TokenStatReader); ok {
+		l.tokenStats[m.ID] = t
+	}
+	if s, ok := adapter.(SessionLister); ok {
+		l.sessions[m.ID] = s
+	}
+	if cp, ok := adapter.(ConfigParser); ok {
+		l.configParse[m.ID] = cp
+	}
 	return nil
+}
+
+// TokenStat 取出一个部落的 Token 消耗读取器。
+func (l *Land) TokenStat(id string) (TokenStatReader, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	t, ok := l.tokenStats[id]
+	return t, ok
+}
+
+// Sessions 取出一个部落的会话列表器。
+func (l *Land) Sessions(id string) (SessionLister, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	s, ok := l.sessions[id]
+	return s, ok
+}
+
+// ConfigParse 取出一个部落的配置结构化解析器。
+func (l *Land) ConfigParse(id string) (ConfigParser, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	cp, ok := l.configParse[id]
+	return cp, ok
 }
 
 // Detector 取出一个部落的进程检测器。

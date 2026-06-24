@@ -15,6 +15,7 @@ interface AlandState {
   view: View
   activeTribe: string | null
   spotlight: boolean
+  forgeOpen: boolean
 
   // 大陆数据
   tribes: Record<string, Tribe>
@@ -30,12 +31,14 @@ interface AlandState {
   returnOverlook: () => void
   toggleSpotlight: () => void
   setSpotlight: (open: boolean) => void
+  setForgeOpen: (open: boolean) => void
 }
 
 export const useAland = create<AlandState>((set, get) => ({
   view: 'overlook',
   activeTribe: null,
   spotlight: false,
+  forgeOpen: false,
   tribes: {},
   meta: {},
   booted: false,
@@ -81,5 +84,9 @@ export const useAland = create<AlandState>((set, get) => ({
 
   setSpotlight(open: boolean) {
     set({spotlight: open})
+  },
+
+  setForgeOpen(open: boolean) {
+    set({forgeOpen: open})
   },
 }))

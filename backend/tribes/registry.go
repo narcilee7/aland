@@ -5,8 +5,8 @@ package tribes
 func RegisterAll(land *Land) error {
 	adapters := []any{
 		NewClaudeAdapter(""),
-		// NewCursorAdapter(""),
-		// NewTraeAdapter(""),
+		NewCursorAdapter(""),
+		NewTraeAdapter(""),
 		// NewKimiAdapter(""),
 	}
 	for _, a := range adapters {

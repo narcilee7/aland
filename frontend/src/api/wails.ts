@@ -33,6 +33,41 @@ export interface Tribe {
   vital: VitalSign
 }
 
+// —— Config DNA 三层 ——
+
+export interface ConfigItem {
+  key: string
+  value: unknown
+  type: string
+  layer: 'surface' | 'middle' | 'deep'
+  sensitive?: boolean
+}
+
+export interface ConfigDNA {
+  source: string
+  surface: ConfigItem[]
+  middle: ConfigItem[]
+  deep: ConfigItem[]
+}
+
+// —— 记忆碎片 ——
+
+export interface SessionShard {
+  id: string
+  tribe: string
+  timestamp: number
+  messageCount: number
+  tokenCount: number
+  model: string
+  cwd: string
+  project: string
+  filePath: string
+  sizeBytes: number
+  summary: string
+}
+
+// —— Token 熔炉 ——
+
 export interface Forge {
   dailyBudget: number
   todaySpent: number
@@ -52,8 +87,10 @@ declare global {
           LaunchTribe(id: string, cwd: string, args: string[]): Promise<void>
           KillTribe(id: string): Promise<void>
           ReadTribeConfig(id: string): Promise<Record<string, unknown>>
+          ReadTribeConfigDNA(id: string): Promise<ConfigDNA>
           GetForge(): Promise<Forge>
           GetTribeMeta(id: string): Promise<TribeMeta>
+          ListSessions(id: string): Promise<SessionShard[]>
         }
       }
     }
@@ -88,5 +125,28 @@ export async function getTribeMeta(id: string): Promise<TribeMeta | null> {
     return await window.go.main.App.GetTribeMeta(id)
   } catch {
     return null
+  }
+}
+
+export async function getForge(): Promise<Forge> {
+  if (!wailsAvailable()) return {dailyBudget: 0, todaySpent: 0, byTribe: {}, byModel: {}}
+  return window.go.main.App.GetForge()
+}
+
+export async function readTribeConfigDNA(id: string): Promise<ConfigDNA | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return await window.go.main.App.ReadTribeConfigDNA(id)
+  } catch {
+    return null
+  }
+}
+
+export async function listSessions(id: string): Promise<SessionShard[]> {
+  if (!wailsAvailable()) return []
+  try {
+    return await window.go.main.App.ListSessions(id)
+  } catch {
+    return []
   }
 }

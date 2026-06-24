@@ -1,13 +1,18 @@
 // 大陆俯瞰——主界面。
 // Canvas 渲染等距地图，hover 高亮，点击进入部落。
 
-import { useEffect, useRef, useState } from 'react'
-import { useAland } from '../stores/alandStore'
-import { hitTest, renderLand, type Camera } from '../canvas/IsometricEngine'
-import { DEFAULT_PLACEMENTS } from '../canvas/layouts'
-import { Badge, Button, Tooltip, TooltipContent, TooltipTrigger } from './ui'
+import {useEffect, useRef, useState} from 'react'
+import {useAland} from '../stores/alandStore'
+import {hitTest, renderLand, type Camera} from '../canvas/IsometricEngine'
+import {DEFAULT_PLACEMENTS} from '../canvas/layouts'
+import {Button, Tooltip, TooltipContent, TooltipTrigger} from './ui'
+import {Flame} from 'lucide-react'
 
-export function Overlook() {
+interface OverlookProps {
+  onOpenForge?: () => void
+}
+
+export function Overlook({onOpenForge}: OverlookProps = {}) {
   const tribes = useAland(s => s.tribes)
   const meta = useAland(s => s.meta)
   const enterTribe = useAland(s => s.enterTribe)
@@ -91,6 +96,26 @@ export function Overlook() {
         <span>{new Date().toLocaleTimeString()}</span>
       </div>
 
+      {/* Forge 入口（右上角） */}
+      {onOpenForge && (
+        <div className="absolute top-10 right-4 interactive">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={onOpenForge}
+                variant="outline"
+                size="sm"
+                className="font-mono"
+              >
+                <Flame className="h-3 w-3" />
+                Forge
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">Token 熔炉 · 今日消耗</TooltipContent>
+          </Tooltip>
+        </div>
+      )}
+
       {/* hover 提示 */}
       {hover && meta[hover] && (
         <div
@@ -127,6 +152,3 @@ export function Overlook() {
     </div>
   )
 }
-
-// 防止未使用的 Badge 引入被 tree-shake 警告
-void Badge
