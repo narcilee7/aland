@@ -24,6 +24,7 @@ import {
 } from '../api/wails'
 import {ArrowLeft, Layers, ScrollText, Eye, EyeOff, Save, Check, Cpu} from 'lucide-react'
 import {Badge, Button, Card, CardContent, CardHeader, CardTitle, Separator} from './ui'
+import {Insights} from './Insights'
 
 export function TribeView() {
   const activeTribe = useAland(s => s.activeTribe)
@@ -111,25 +112,38 @@ export function TribeView() {
       {isIDE ? (
         <IDEWorkspace caps={caps} tribe={liveTribe} />
       ) : (
-        <CapabilityDrivenPanels
-          caps={caps}
-          dna={dna}
-          dnaDraft={dnaDraft}
-          setDnaDraft={setDnaDraft}
-          sessions={sessions}
-          showSensitive={showSensitive}
-          setShowSensitive={setShowSensitive}
-          saved={saved}
-          onSave={async () => {
-            if (!activeTribe || !dnaDraft) return
-            const ok = await writeTribeConfig(activeTribe, dnaDraft)
-            if (ok) {
-              setDna(dnaDraft)
-              setSaved(true)
-              setTimeout(() => setSaved(false), 2000)
-            }
-          }}
-        />
+        <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
+          {/* 左：Config + Sessions（原 CapabilityDrivenPanels 内容） */}
+          <CapabilityDrivenPanels
+            caps={caps}
+            dna={dna}
+            dnaDraft={dnaDraft}
+            setDnaDraft={setDnaDraft}
+            sessions={sessions}
+            showSensitive={showSensitive}
+            setShowSensitive={setShowSensitive}
+            saved={saved}
+            onSave={async () => {
+              if (!activeTribe || !dnaDraft) return
+              const ok = await writeTribeConfig(activeTribe, dnaDraft)
+              if (ok) {
+                setDna(dnaDraft)
+                setSaved(true)
+                setTimeout(() => setSaved(false), 2000)
+              }
+            }}
+          />
+          {/* 右：Insights（MCP/Skills/Plugins/Plans/History/Activity/Live） */}
+          <Insights
+            tribeId={activeTribe}
+            caps={{
+              sessions: caps.sessions,
+              sessionTail: caps.sessionTail,
+              tokens: caps.tokens,
+              tokensLive: caps.tokensLive,
+            }}
+          />
+        </div>
       )}
     </div>
   )

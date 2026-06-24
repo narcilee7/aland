@@ -3,7 +3,7 @@
 // 这里手写类型是因为 Wails 自动生成的 .d.ts 在 dev 跑之前不存在。
 // 事件订阅统一搬到 ./events.ts。
 
-import type {EventsOn} from '../../wailsjs/runtime/runtime'
+import type { EventsOn } from '../../wailsjs/runtime/runtime'
 
 // —— 与后端 tribes.Tribe / tribes.Meta 对齐 ——
 
@@ -87,6 +87,94 @@ export interface Capabilities {
   features: Feature[]
 }
 
+export interface MCPServer {
+  name: string
+  command: string
+  args?: string[]
+  env?: Record<string, string>
+  transport?: string
+  source: string
+  enabled: boolean
+}
+
+export interface Skill {
+  name: string
+  description: string
+  path: string
+  content: string
+}
+
+export interface PlanFile {
+  name: string
+  path: string
+  size: number
+  modifiedAt: number
+  summary: string
+}
+
+export interface FileEdit {
+  path: string
+  backupPath: string
+  timestamp: number
+  originalHash?: string
+  version: number
+}
+
+export interface Plugin {
+  name: string
+  enabled: boolean
+  source: string
+}
+
+export interface DailyActivity {
+  date: string
+  messageCount: number
+  sessionCount: number
+  toolCallCount: number
+}
+
+export interface ModelTokenUsage {
+  model: string
+  date: string
+  inputTokens: number
+  outputTokens: number
+  cacheRead?: number
+  cacheWrite?: number
+}
+
+export interface SlashCommand {
+  command: string
+  args?: string
+  timestamp: number
+  cwd?: string
+}
+
+export interface SessionTokenDelta {
+  input: number
+  output: number
+  cache?: number
+}
+
+export interface SessionToolUse {
+  name: string
+  input?: string
+  output?: string
+  status?: string
+}
+
+export interface SessionEvent {
+  type: string
+  subtype?: string
+  timestamp: number
+  role?: string
+  content?: string
+  thinking?: string
+  model?: string
+  tokens?: SessionTokenDelta
+  tool?: SessionToolUse
+  error?: string
+}
+
 // —— 记忆碎片 ——
 
 export interface SessionShard {
@@ -131,6 +219,18 @@ declare global {
           GetTribeCapabilities(id: string): Promise<Capabilities>
           GetAllCapabilities(): Promise<Record<string, Capabilities>>
           ListSessions(id: string): Promise<SessionShard[]>
+          ReadSession(id: string, sessionId: string): Promise<SessionEvent[]>
+          ListMCPServers(id: string): Promise<MCPServer[]>
+          ListSkills(id: string): Promise<Skill[]>
+          ListPlans(id: string): Promise<PlanFile[]>
+          ListFileHistory(id: string): Promise<FileEdit[]>
+          RestoreFile(id: string, edit: FileEdit): Promise<void>
+          ListDailyActivity(id: string): Promise<DailyActivity[]>
+          ListModelTokenUsage(id: string): Promise<ModelTokenUsage[]>
+          RecentSlashCommands(id: string, n: number): Promise<SlashCommand[]>
+          ListPlugins(id: string): Promise<Plugin[]>
+          StreamLatestSession(id: string): Promise<void>
+          StopLatestSession(id: string): Promise<void>
         }
       }
     }
@@ -169,7 +269,7 @@ export async function getTribeMeta(id: string): Promise<TribeMeta | null> {
 }
 
 export async function getForge(): Promise<Forge> {
-  if (!wailsAvailable()) return {dailyBudget: 0, todaySpent: 0, byTribe: {}, byModel: {}}
+  if (!wailsAvailable()) return { dailyBudget: 0, todaySpent: 0, byTribe: {}, byModel: {} }
   return window.go.main.App.GetForge()
 }
 
@@ -218,3 +318,28 @@ export async function writeTribeConfig(id: string, dna: ConfigDNA): Promise<bool
     return false
   }
 }
+
+export const listMCPServers = (id: string) =>
+  wailsAvailable() ? window.go.main.App.ListMCPServers(id) : Promise.resolve([])
+export const listSkills = (id: string) =>
+  wailsAvailable() ? window.go.main.App.ListSkills(id) : Promise.resolve([])
+export const listPlans = (id: string) =>
+  wailsAvailable() ? window.go.main.App.ListPlans(id) : Promise.resolve([])
+export const listFileHistory = (id: string) =>
+  wailsAvailable() ? window.go.main.App.ListFileHistory(id) : Promise.resolve([])
+export const restoreFile = (id: string, edit: FileEdit) =>
+  wailsAvailable() ? window.go.main.App.RestoreFile(id, edit) : Promise.resolve()
+export const listDailyActivity = (id: string) =>
+  wailsAvailable() ? window.go.main.App.ListDailyActivity(id) : Promise.resolve([])
+export const listModelTokenUsage = (id: string) =>
+  wailsAvailable() ? window.go.main.App.ListModelTokenUsage(id) : Promise.resolve([])
+export const recentSlashCommands = (id: string, n: number) =>
+  wailsAvailable() ? window.go.main.App.RecentSlashCommands(id, n) : Promise.resolve([])
+export const listPlugins = (id: string) =>
+  wailsAvailable() ? window.go.main.App.ListPlugins(id) : Promise.resolve([])
+export const readSession = (id: string, sessionId: string) =>
+  wailsAvailable() ? window.go.main.App.ReadSession(id, sessionId) : Promise.resolve([])
+export const streamLatestSession = (id: string) =>
+  wailsAvailable() ? window.go.main.App.StreamLatestSession(id) : Promise.resolve()
+export const stopLatestSession = (id: string) =>
+  wailsAvailable() ? window.go.main.App.StopLatestSession(id) : Promise.resolve()

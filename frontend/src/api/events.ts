@@ -1,7 +1,7 @@
 // 前端事件层——与后端 events/events.go 严格对齐。
 // 改一处记着改另一处（强约束：常量值必须完全一致）。
 
-import type {Tribe} from './wails'
+import type {SessionEvent, Tribe} from './wails'
 
 // 事件名常量。
 export const EventName = {
@@ -10,6 +10,7 @@ export const EventName = {
   TribeDeath: 'tribe:death',
   FSChange: 'fs:change',
   SpotlightToggle: 'spotlight:toggle',
+  SessionEvent: 'session:event',
 } as const
 
 export type EventName = (typeof EventName)[keyof typeof EventName]
@@ -62,3 +63,6 @@ export const onFSChange = (cb: (e: FSChangeEvent) => void) => on<FSChangeEvent>(
 
 export const onSpotlightToggle = (cb: (e: SpotlightToggleEvent) => void) =>
   on<SpotlightToggleEvent>(EventName.SpotlightToggle, cb)
+
+export const onSessionEvent = (cb: (e: SessionEvent) => void) =>
+  on<SessionEvent>(EventName.SessionEvent, cb)
