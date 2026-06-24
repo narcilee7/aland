@@ -116,34 +116,50 @@ func (c *ClaudeAdapter) ParseConfig() (map[string]any, error) {
 
 // DetectProcess 扫描系统中正在运行的 claude 进程。
 // 拿真实 PID/CPU/内存/CWD/启动时间。
+//
+// 匹配规则：必须 comm 字段等于 "claude"（实际二进制名），不只匹配 cmdline 子串。
+// 否则 zsh 这种跑 ~/.claude/... 路径的 shell 会被误中。
 // 找不到返回 (nil, nil)，不算错误。
 func (c *ClaudeAdapter) DetectProcess() (*ProcessInfo, error) {
-	// 1. 找 PID + 命令行
+	// 1. 找 PID + comm（真实进程名）+ 命令行
 	cmd := exec.Command("ps", "-axo", "pid=,comm=,args=")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}
 	var pid int
+	var comm string
 	var cmdline string
 	for _, line := range bytes.Split(out, []byte("\n")) {
 		s := strings.TrimSpace(string(line))
-		if !strings.Contains(strings.ToLower(s), "claude") {
+		if s == "" {
 			continue
 		}
-		if strings.Contains(s, "grep") {
-			continue
-		}
-		fields := strings.Fields(s)
+		// ps 输出格式：PID COMM ARGS
+		// COMM 不能包含空格；ARGS 可包含
+		// 第一个 whitespace-separated token 是 PID
+		// 找到第一个空格后第一个 token 是 COMM（截至下一个 ARG 起始）
+		// 因为 COMM 在 ps 里默认是截断的（不超过 16 字节），简化处理：
+		// 取前 2 个 whitespace-separated 字段做 pid + comm
+		fields := strings.SplitN(s, " ", 3)
 		if len(fields) < 2 {
 			continue
 		}
-		p, err := strconv.Atoi(fields[0])
+		// COMM 必须正好是 "claude"（精确匹配）
+		if fields[1] != "claude" {
+			continue
+		}
+		p, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 		if err != nil || p == 0 {
 			continue
 		}
 		pid = p
-		cmdline = s
+		comm = fields[1]
+		if len(fields) > 2 {
+			cmdline = fields[2]
+		} else {
+			cmdline = comm
+		}
 		break
 	}
 	if pid == 0 {
@@ -151,7 +167,7 @@ func (c *ClaudeAdapter) DetectProcess() (*ProcessInfo, error) {
 	}
 
 	// 2. 拿真实 CPU/内存/启动时间
-	info := &ProcessInfo{PID: pid, Name: cmdline, CmdLine: cmdline}
+	info := &ProcessInfo{PID: pid, Name: comm, CmdLine: cmdline}
 	if stats, err := readProcStats(pid); err == nil {
 		info.CPU = stats.cpu
 		info.Memory = stats.memMB
@@ -443,7 +459,7 @@ func truncate(s string, n int) string {
 // ParseTokenUsage 从 ~/.claude/stats-cache.json + 遍历 session 估算 Token 消耗。
 // stats-cache 提供每日 message/session/tool 计数；
 // session 里的 assistant.usage 给出真实 token 数；
-// 按 model 价格表算 USD（不再用 Opus 单价瞎算）。
+// 按 model 价格表算 USD（不在表里返回 0，不瞎算）。
 func (c *ClaudeAdapter) ParseTokenUsage() (*TokenUsage, error) {
 	usages, err := c.ModelTokenUsage()
 	if err != nil {
@@ -456,12 +472,17 @@ func (c *ClaudeAdapter) ParseTokenUsage() (*TokenUsage, error) {
 	var inTok, outTok, cacheRead, cacheWrite int64
 	var cost float64
 	modelSet := map[string]bool{}
+	hasKnownPrice := false
 	for _, u := range usages {
 		inTok += u.InputTokens
 		outTok += u.OutputTokens
 		cacheRead += u.CacheRead
 		cacheWrite += u.CacheWrite
-		cost += CostFromUsage(u.Model, u.InputTokens, u.OutputTokens, u.CacheRead, u.CacheWrite)
+		c, ok := CostFromUsage(u.Model, u.InputTokens, u.OutputTokens, u.CacheRead, u.CacheWrite)
+		if ok {
+			cost += c
+			hasKnownPrice = true
+		}
 		if u.Model != "" {
 			modelSet[u.Model] = true
 		}
@@ -476,12 +497,16 @@ func (c *ClaudeAdapter) ParseTokenUsage() (*TokenUsage, error) {
 		}
 	}
 	_ = modelSet
-	return &TokenUsage{
+	result := &TokenUsage{
 		InputTokens:  inTok,
 		OutputTokens: outTok,
 		Model:        model,
-		CostUSD:      cost,
-	}, nil
+	}
+	// 只在有已知价格时填 CostUSD；否则留 0 让前端显示 "n/a"
+	if hasKnownPrice {
+		result.CostUSD = cost
+	}
+	return result, nil
 }
 
 // ListPlugins 从 settings.enabledPlugins 读。
@@ -567,7 +592,8 @@ func (c *ClaudeAdapter) ParseConfigDNA() (ConfigDNA, error) {
 		switch {
 		case strings.HasPrefix(k, "model"):
 			dna.Surface = append(dna.Surface, ConfigItem{Key: k, Value: v, Type: typ, Layer: "surface"})
-		case strings.HasPrefix(k, "permission"), strings.Contains(k, "API"), strings.Contains(k, "TOKEN"), strings.Contains(k, "AUTH"):
+		case strings.HasPrefix(k, "permission"), k == "env",
+			strings.Contains(k, "API"), strings.Contains(k, "TOKEN"), strings.Contains(k, "AUTH"):
 			meta.Sensitive = true
 			meta.Type = "secret"
 			dna.Middle = append(dna.Middle, ConfigItem{Key: k, Value: v, Type: typ, Layer: "middle", Sensitive: true})

@@ -25,19 +25,20 @@ var defaultPrices = map[string]TokenPriceTable{
 	"claude-haiku-3-5":  {Input: 0.80, Output: 4, CacheRead: 0.08},
 }
 
-// PriceFor 查 model 的价格；找不到给个保守的"高估"默认（避免被低估）。
-func PriceFor(model string) TokenPriceTable {
+// PriceFor 查 model 的价格。
+// 返回值第二个 bool 表示是否在表里找到——找不到时按 0 算（不瞎猜）。
+// 原则：宁可少报，不要让用户看到一个不可信的 USD 数字。
+func PriceFor(model string) (TokenPriceTable, bool) {
 	if p, ok := defaultPrices[model]; ok {
-		return p
+		return p, true
 	}
 	// 模糊匹配：前缀
 	for k, p := range defaultPrices {
 		if strings.HasPrefix(model, k) {
-			return p
+			return p, true
 		}
 	}
-	// 默认按 Sonnet 价位（中等）
-	return TokenPriceTable{Input: 3, Output: 15, CacheRead: 0.30}
+	return TokenPriceTable{}, false
 }
 
 // CostFor 按 TokenPriceTable 算 USD。
@@ -48,7 +49,11 @@ func (p TokenPriceTable) CostFor(in, out, cacheRead, cacheWrite int64) float64 {
 		float64(cacheWrite)*p.Input/1e6 // cache write 算全价 input
 }
 
-// CostFromUsage 一行算价。
-func CostFromUsage(model string, in, out, cacheRead, cacheWrite int64) float64 {
-	return PriceFor(model).CostFor(in, out, cacheRead, cacheWrite)
+// CostFromUsage 算 USD；模型不在价格表里返回 0 + false。
+func CostFromUsage(model string, in, out, cacheRead, cacheWrite int64) (cost float64, known bool) {
+	p, ok := PriceFor(model)
+	if !ok {
+		return 0, false
+	}
+	return p.CostFor(in, out, cacheRead, cacheWrite), true
 }
