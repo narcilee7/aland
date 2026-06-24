@@ -1,5 +1,7 @@
 package tribes
 
+import "context"
+
 // 这里是"部落能力"的小接口集合。
 // 每个接口只暴露一种能力，由消费方按需持有。
 // 适配器不需显式声明实现——Go 的结构性接口让任何匹配签名的类型自动满足。
@@ -75,11 +77,13 @@ type FileHistoryLister interface {
 	RestoreFile(edit FileEdit) error
 }
 
-// StatsProvider 每日活跃 + 按 model token 使用。
+// StatsProvider 每日活跃 + 按 model token 使用 + slash command 历史。
 type StatsProvider interface {
 	DailyActivity() ([]DailyActivity, error)
 	ModelTokenUsage() ([]ModelTokenUsage, error)
 	RecentSlashCommands(n int) ([]SlashCommand, error)
+	// ListPlugins 从 settings.enabledPlugins 读。
+	ListPlugins() ([]Plugin, error)
 }
 
 // SessionStreamer 实时 tail 当前 session。

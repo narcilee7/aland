@@ -218,6 +218,118 @@ func (a *App) ListSessions(id string) ([]tribes.SessionShard, error) {
 	return sl.ParseSessions()
 }
 
+// ReadSession 读取某 session 的完整事件流。
+func (a *App) ReadSession(id, sessionID string) ([]tribes.SessionEvent, error) {
+	sr, ok := a.land.SessionRead(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no session reader", id)
+	}
+	return sr.ReadSession(sessionID)
+}
+
+// ListMCPServers 列出某部落的 MCP servers。
+func (a *App) ListMCPServers(id string) ([]tribes.MCPServer, error) {
+	m, ok := a.land.MCPServers(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no mcp lister", id)
+	}
+	return m.ListMCPServers()
+}
+
+// ListSkills 列出 skills。
+func (a *App) ListSkills(id string) ([]tribes.Skill, error) {
+	s, ok := a.land.Skills(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no skills lister", id)
+	}
+	return s.ListSkills()
+}
+
+// ListPlans 列出 plan files。
+func (a *App) ListPlans(id string) ([]tribes.PlanFile, error) {
+	p, ok := a.land.Plans(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no plans lister", id)
+	}
+	return p.ListPlans()
+}
+
+// ListFileHistory 列出 file history。
+func (a *App) ListFileHistory(id string) ([]tribes.FileEdit, error) {
+	fh, ok := a.land.FileHistory(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no file history", id)
+	}
+	return fh.ListFileHistory()
+}
+
+// RestoreFile 恢复某 file edit 的 backup 版本。
+func (a *App) RestoreFile(id string, edit tribes.FileEdit) error {
+	fh, ok := a.land.FileHistory(id)
+	if !ok {
+		return fmt.Errorf("tribe %s has no file history", id)
+	}
+	return fh.RestoreFile(edit)
+}
+
+// ListDailyActivity 列出每日活跃。
+func (a *App) ListDailyActivity(id string) ([]tribes.DailyActivity, error) {
+	s, ok := a.land.Stats(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no stats", id)
+	}
+	return s.DailyActivity()
+}
+
+// ListModelTokenUsage 按 model 列出 token 消耗。
+func (a *App) ListModelTokenUsage(id string) ([]tribes.ModelTokenUsage, error) {
+	s, ok := a.land.Stats(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no stats", id)
+	}
+	return s.ModelTokenUsage()
+}
+
+// RecentSlashCommands 最近 n 条 slash command 历史。
+func (a *App) RecentSlashCommands(id string, n int) ([]tribes.SlashCommand, error) {
+	s, ok := a.land.Stats(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no stats", id)
+	}
+	return s.RecentSlashCommands(n)
+}
+
+// ListPlugins 列出启用的 plugins。
+func (a *App) ListPlugins(id string) ([]tribes.Plugin, error) {
+	s, ok := a.land.Stats(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no stats", id)
+	}
+	return s.ListPlugins()
+}
+
+// StreamLatestSession 启动 session 实时 tail。
+// 事件通过 events.SESSION_EVENT 推到前端。
+func (a *App) StreamLatestSession(id string) error {
+	ss, ok := a.land.SessionStream(id)
+	if !ok {
+		return fmt.Errorf("tribe %s has no session streamer", id)
+	}
+	cb := func(ev tribes.SessionEvent) {
+		a.em.Emit(events.SessionEvent, ev)
+	}
+	return ss.StreamLatest(a.ctx, cb)
+}
+
+// StopLatestSession 停止 tail。
+func (a *App) StopLatestSession(id string) {
+	ss, ok := a.land.SessionStream(id)
+	if !ok {
+		return
+	}
+	ss.StopStream()
+}
+
 // GetTribeMeta 返回部落元信息（前端用来渲染地形）。
 func (a *App) GetTribeMeta(id string) (tribes.Meta, error) {
 	t, ok := a.land.Get(id)

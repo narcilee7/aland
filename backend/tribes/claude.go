@@ -3,6 +3,7 @@ package tribes
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,9 +21,14 @@ import (
 
 // ClaudeAdapter 适配 Claude Code CLI。
 // 它是一个具体的实现，结构性满足 Identity/Detector/Launcher/Reader/
-// SessionLister/TokenStatReader —— 不需要显式声明接口实现。
+// SessionLister/TokenStatReader/MCPServerLister/.../SessionStreamer ——
+// 不需要显式声明接口实现。
 type ClaudeAdapter struct {
 	home string
+
+	// streamMu / streamCancel 保护实时 tail 状态。
+	streamMu     sync.Mutex
+	streamCancel context.CancelFunc
 }
 
 // NewClaudeAdapter 构造一个 Claude 适配器。
@@ -43,25 +50,24 @@ func (c *ClaudeAdapter) EcoType() string { return "classical" }
 func (c *ClaudeAdapter) ThemeColor() string  { return "#d4a853" }
 func (c *ClaudeAdapter) AccentColor() string { return "#ffdf80" }
 
-// Capabilities 报家门：Claude Code 是 A 级 CLI agent，全套能力都具备。
-// SessionTail / TokensLive 留 false，等实时流模块做完再翻 true。
+// Capabilities 报家门：Claude Code 是 A 级 CLI agent，19 项全做透。
 func (c *ClaudeAdapter) Capabilities() Capabilities {
 	return Capabilities{
 		Process:     true,
 		Launch:      true,
 		Config:      true,
-		ConfigEdit:  true, // 本轮要做透
+		ConfigEdit:  true,
 		Sessions:    true,
-		SessionTail: false, // TODO: M2 killer
+		SessionTail: true, // M2 杀手锏
 		Tokens:      true,
-		TokensLive:  false, // TODO: M2
+		TokensLive:  true, // 实时增量：来自 session stream 的 SessionEvent.Tokens
 
 		Features: []Feature{
 			{ID: FeatureMCPServers, Label: "MCP Servers", Description: "Model Context Protocol servers configured for this CLI", HasData: true},
 			{ID: FeatureSkills, Label: "Skills", Description: "Custom slash commands and skills loaded", HasData: true},
 			{ID: FeaturePlugins, Label: "Plugins", Description: "Enabled plugins (LSP, hooks, etc.)", HasData: true},
 			{ID: FeaturePlans, Label: "Plan Files", Description: "Plan mode artifacts", HasData: true},
-			{ID: FeatureFileHistory, Label: "File History", Description: "Tracked file backups and edits", HasData: false},
+			{ID: FeatureFileHistory, Label: "File History", Description: "Tracked file backups and edits", HasData: true},
 		},
 	}
 }
@@ -436,93 +442,79 @@ func truncate(s string, n int) string {
 
 // ParseTokenUsage 从 ~/.claude/stats-cache.json + 遍历 session 估算 Token 消耗。
 // stats-cache 提供每日 message/session/tool 计数；
-// session 里的 assistant.usage 给出真实 token 数。
+// session 里的 assistant.usage 给出真实 token 数；
+// 按 model 价格表算 USD（不再用 Opus 单价瞎算）。
 func (c *ClaudeAdapter) ParseTokenUsage() (*TokenUsage, error) {
-	// 1. 扫所有 session 累加 token（精确但慢）
-	dir := c.projectsDir()
-	entries, err := os.ReadDir(dir)
+	usages, err := c.ModelTokenUsage()
+	if err != nil {
+		return nil, err
+	}
+	if len(usages) == 0 {
+		return &TokenUsage{}, nil
+	}
+
+	var inTok, outTok, cacheRead, cacheWrite int64
+	var cost float64
+	modelSet := map[string]bool{}
+	for _, u := range usages {
+		inTok += u.InputTokens
+		outTok += u.OutputTokens
+		cacheRead += u.CacheRead
+		cacheWrite += u.CacheWrite
+		cost += CostFromUsage(u.Model, u.InputTokens, u.OutputTokens, u.CacheRead, u.CacheWrite)
+		if u.Model != "" {
+			modelSet[u.Model] = true
+		}
+	}
+	// 主要 model（消耗最多的）
+	var model string
+	max := int64(0)
+	for _, u := range usages {
+		if u.InputTokens+u.OutputTokens > max {
+			max = u.InputTokens + u.OutputTokens
+			model = u.Model
+		}
+	}
+	_ = modelSet
+	return &TokenUsage{
+		InputTokens:  inTok,
+		OutputTokens: outTok,
+		Model:        model,
+		CostUSD:      cost,
+	}, nil
+}
+
+// ListPlugins 从 settings.enabledPlugins 读。
+// 未来：扫 ~/.claude/plugins/ 找本地安装的。
+func (c *ClaudeAdapter) ListPlugins() ([]Plugin, error) {
+	data, err := os.ReadFile(filepath.Join(c.claudeHome(), "settings.json"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-
-	var inTok, outTok int64
-	modelSet := map[string]bool{}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		files, _ := os.ReadDir(filepath.Join(dir, e.Name()))
-		for _, f := range files {
-			if f.IsDir() || !strings.HasSuffix(f.Name(), ".jsonl") {
-				continue
-			}
-			tokens := scanTokensInSession(filepath.Join(dir, e.Name(), f.Name()))
-			inTok += tokens.in
-			outTok += tokens.out
-			if tokens.model != "" {
-				modelSet[tokens.model] = true
-			}
-		}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
 	}
-	// 取一个 model 代表（多 model 场景后续扩展）
-	var model string
-	for m := range modelSet {
-		model = m
-		break
+	enabled, ok := raw["enabledPlugins"].(map[string]any)
+	if !ok {
+		return nil, nil
 	}
-	return &TokenUsage{
-		InputTokens:  inTok,
-		OutputTokens: outTok,
-		Model:        model,
-		// 简单估算：$3 / 1M input, $15 / 1M output（Opus 价位；前端允许覆盖）
-		CostUSD: float64(inTok)*3/1e6 + float64(outTok)*15/1e6,
-	}, nil
-}
-
-type sessionTokens struct {
-	in, out int64
-	model   string
-}
-
-// scanTokensInSession 累加一个 session 里的 token。
-// 性能：一次只解析 assistant 事件的 usage 字段。
-func scanTokensInSession(path string) sessionTokens {
-	f, err := os.Open(path)
-	if err != nil {
-		return sessionTokens{}
+	var out []Plugin
+	for name, v := range enabled {
+		enabled := false
+		if b, ok := v.(bool); ok {
+			enabled = b
+		}
+		out = append(out, Plugin{
+			Name:    name,
+			Enabled: enabled,
+			Source:  "settings.json",
+		})
 	}
-	defer f.Close()
-	var out sessionTokens
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64*1024), 1<<20)
-	for sc.Scan() {
-		var ev map[string]any
-		if err := json.Unmarshal(sc.Bytes(), &ev); err != nil {
-			continue
-		}
-		if t, _ := ev["type"].(string); t != "assistant" {
-			continue
-		}
-		msg, _ := ev["message"].(map[string]any)
-		if msg == nil {
-			continue
-		}
-		if usage, ok := msg["usage"].(map[string]any); ok {
-			if v, ok := usage["input_tokens"].(float64); ok {
-				out.in += int64(v)
-			}
-			if v, ok := usage["output_tokens"].(float64); ok {
-				out.out += int64(v)
-			}
-		}
-		if m, _ := msg["model"].(string); m != "" && out.model == "" {
-			out.model = m
-		}
-	}
-	return out
+	return out, nil
 }
 
 // —— ConfigParser（设计 doc 提到的 Config DNA / 三层）——

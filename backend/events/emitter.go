@@ -51,3 +51,8 @@ func (e *Emitter) EmitFSChange(path, op string) {
 func (e *Emitter) EmitSpotlightToggle(action string) {
 	e.Emit(SpotlightToggle, SpotlightToggleEvent{Action: action})
 }
+
+// EmitSessionEvent session:event 的快捷方法。
+func (e *Emitter) EmitSessionEvent(ev any) {
+	e.Emit(SessionEvent, ev)
+}
