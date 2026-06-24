@@ -201,6 +201,33 @@ export interface Forge {
   byModel: Record<string, number>
 }
 
+// —— 灵动岛 (Eye) ——
+
+export type EyeMode = 'dormant' | 'active' | 'storm' | 'alert'
+
+export type FlashType =
+  | 'complete'
+  | 'cost_alert'
+  | 'error'
+  | 'conflict'
+  | 'born'
+  | 'death'
+
+export interface Flash {
+  id: string
+  type: FlashType
+  tribe: string
+  content: string
+  createdAt: number
+}
+
+export interface EyeState {
+  mode: EyeMode
+  running: string[]
+  flashing: Flash[]
+  updatedAt: number
+}
+
 // —— 类型安全的 Wails 桥 ——
 
 declare global {
@@ -232,6 +259,11 @@ declare global {
           ListPlugins(id: string): Promise<Plugin[]>
           StreamLatestSession(id: string): Promise<void>
           StopLatestSession(id: string): Promise<void>
+
+          // 灵动岛
+          GetEyeState(): Promise<EyeState>
+          ConsumeEyeFlash(id: string): Promise<boolean>
+          ClearEyeFlashes(): Promise<void>
         }
       }
     }
@@ -357,3 +389,39 @@ export const streamLatestSession = (id: string) =>
   wailsAvailable() ? window.go.backend.App.StreamLatestSession(id) : Promise.resolve()
 export const stopLatestSession = (id: string) =>
   wailsAvailable() ? window.go.backend.App.StopLatestSession(id) : Promise.resolve()
+
+// —— Eye 灵动岛 API ——
+
+const DEFAULT_EYE: EyeState = {
+  mode: 'dormant',
+  running: [],
+  flashing: [],
+  updatedAt: 0,
+}
+
+export async function getEyeState(): Promise<EyeState> {
+  if (!wailsAvailable()) return DEFAULT_EYE
+  try {
+    return toCamel<EyeState>(await window.go.backend.App.GetEyeState())
+  } catch {
+    return DEFAULT_EYE
+  }
+}
+
+export async function consumeEyeFlash(id: string): Promise<boolean> {
+  if (!wailsAvailable()) return false
+  try {
+    return await window.go.backend.App.ConsumeEyeFlash(id)
+  } catch {
+    return false
+  }
+}
+
+export async function clearEyeFlashes(): Promise<void> {
+  if (!wailsAvailable()) return
+  try {
+    await window.go.backend.App.ClearEyeFlashes()
+  } catch {
+    /* noop */
+  }
+}

@@ -11,9 +11,10 @@ interface OverlookProps {
   onOpenForge?: () => void
   onOpenMatrix?: () => void
   onOpenSpotlight?: () => void
+  onOpenEye?: () => void
 }
 
-export function Overlook({onOpenForge, onOpenMatrix, onOpenSpotlight}: OverlookProps = {}) {
+export function Overlook({onOpenForge, onOpenMatrix, onOpenSpotlight, onOpenEye}: OverlookProps = {}) {
   // 只订阅函数（稳定的引用），数据走 ref——这样 tribe:vital 不会触发 useEffect 重跑
   // 避免 canvas 每秒被 reset 闪烁
   const enterTribe = useAland(s => s.enterTribe)
@@ -115,6 +116,7 @@ export function Overlook({onOpenForge, onOpenMatrix, onOpenSpotlight}: OverlookP
       <TribeDock
         onOpenForge={onOpenForge}
         onOpenMatrix={onOpenMatrix}
+        onOpenEye={onOpenEye}
         onOpenSpotlight={onOpenSpotlight ?? toggleSpotlight}
       />
 

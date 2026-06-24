@@ -1,7 +1,7 @@
 // 前端事件层——与后端 events/events.go 严格对齐。
 // 改一处记着改另一处（强约束：常量值必须完全一致）。
 
-import type {SessionEvent, Tribe} from './wails'
+import type {EyeMode, Flash, SessionEvent, Tribe} from './wails'
 import {toCamel} from '../lib/camel'
 
 // 事件名常量。
@@ -12,11 +12,13 @@ export const EventName = {
   FSChange: 'fs:change',
   SpotlightToggle: 'spotlight:toggle',
   SessionEvent: 'session:event',
+  EyeUpdate: 'eye:update',
+  EyeFlash: 'eye:flash',
 } as const
 
 export type EventName = (typeof EventName)[keyof typeof EventName]
 
-// Payload 类型——与后端 events.TribeLifecycleEvent / FSChangeEvent / SpotlightToggleEvent 镜像。
+// Payload 类型——与后端 events.TribeLifecycleEvent / FSChangeEvent / SpotlightToggleEvent / EyeUpdateEvent / EyeFlashEvent 镜像。
 export interface TribeLifecycleEvent {
   id: string
   pid: number
@@ -30,6 +32,16 @@ export interface FSChangeEvent {
 
 export interface SpotlightToggleEvent {
   action: 'open' | 'close' | 'toggle'
+}
+
+export interface EyeUpdateEvent {
+  mode: EyeMode
+  running: string[]
+  updatedAt: number
+}
+
+export interface EyeFlashEvent {
+  flash: Flash
 }
 
 export type TribeSnapshotMap = Record<string, Tribe>
@@ -68,3 +80,9 @@ export const onSpotlightToggle = (cb: (e: SpotlightToggleEvent) => void) =>
 
 export const onSessionEvent = (cb: (e: SessionEvent) => void) =>
   on<SessionEvent>(EventName.SessionEvent, e => cb(toCamel<SessionEvent>(e)))
+
+export const onEyeUpdate = (cb: (e: EyeUpdateEvent) => void) =>
+  on<EyeUpdateEvent>(EventName.EyeUpdate, e => cb(toCamel<EyeUpdateEvent>(e)))
+
+export const onEyeFlash = (cb: (e: EyeFlashEvent) => void) =>
+  on<EyeFlashEvent>(EventName.EyeFlash, e => cb(toCamel<EyeFlashEvent>(e)))
