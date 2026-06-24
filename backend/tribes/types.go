@@ -60,11 +60,138 @@ type ConfigItem struct {
 	Sensitive bool   `json:"sensitive,omitempty"`
 }
 
+// ConfigField 一个配置项的 schema 元信息。
+// 让前端能根据类型渲染不同的 UI（string → text input，secret → masked，enum → select）。
+type ConfigField struct {
+	Key         string   `json:"key"`
+	Label       string   `json:"label,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Type        string   `json:"type"` // string | number | boolean | enum | secret | json
+	EnumValues  []string `json:"enumValues,omitempty"`
+	Sensitive   bool     `json:"sensitive"`
+	Editable    bool     `json:"editable"`
+	Default     any      `json:"default,omitempty"`
+}
+
+// ConfigSchema 整个配置的 schema（每条 key 一个 Field）。
+// 让"任意 adapter 的配置"都能被同一套 UI 渲染——可扩展架构的关键。
+type ConfigSchema struct {
+	Fields []ConfigField `json:"fields"`
+}
+
 // ConfigDNA 三层配置：surface（运行时） / middle（API & 权限） / deep（其他）。
-// 来源标识 Source 用于 UI 展示"配置自哪"。
+// Schema 是可扩展渲染入口；Items 是当前值。
 type ConfigDNA struct {
 	Source  string       `json:"source"`
+	Schema  ConfigSchema `json:"schema"`
 	Surface []ConfigItem `json:"surface"`
 	Middle  []ConfigItem `json:"middle"`
 	Deep    []ConfigItem `json:"deep"`
+}
+
+// —— 19 项能力对应的新类型 ——
+
+// MCPServer Model Context Protocol server 配置。
+// 来自 ~/.claude/.mcp.json 或 settings.json 里的 mcpServers。
+type MCPServer struct {
+	Name      string            `json:"name"`
+	Command   string            `json:"command"`
+	Args      []string          `json:"args,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
+	Transport string            `json:"transport,omitempty"` // stdio / sse / http
+	Source    string            `json:"source"`             // ".mcp.json" / "settings.json"
+	Enabled   bool              `json:"enabled"`
+}
+
+// Skill 自定义 skill（slash command）定义。
+// 来自 ~/.claude/skills/<name>/SKILL.md。
+type Skill struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Path        string `json:"path"`
+	Content     string `json:"content"`
+}
+
+// PlanFile Plan 模式的产物。
+// 来自 ~/.claude/plans/*.md。
+type PlanFile struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	Size       int64  `json:"size"`
+	ModifiedAt int64  `json:"modifiedAt"`
+	Summary    string `json:"summary"`
+}
+
+// FileEdit Claude 修改过的文件历史（来自 ~/.claude/file-history/）。
+// 配合 backup 路径，可以做 restore。
+type FileEdit struct {
+	Path         string `json:"path"`
+	BackupPath   string `json:"backupPath"`
+	Timestamp    int64  `json:"timestamp"`
+	OriginalHash string `json:"originalHash,omitempty"`
+	Version      int    `json:"version"`
+}
+
+// Plugin 启用的 plugin（来自 settings.json 的 enabledPlugins）。
+type Plugin struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	Source  string `json:"source"` // settings.json
+}
+
+// DailyActivity 来自 ~/.claude/stats-cache.json。
+// 每天的消息数 / session 数 / tool 调用数。
+type DailyActivity struct {
+	Date         string `json:"date"`
+	MessageCount int    `json:"messageCount"`
+	SessionCount int    `json:"sessionCount"`
+	ToolCallCount int   `json:"toolCallCount"`
+}
+
+// ModelTokenUsage 单 model 单日 token 使用。
+type ModelTokenUsage struct {
+	Model        string `json:"model"`
+	Date         string `json:"date"`
+	InputTokens  int64  `json:"inputTokens"`
+	OutputTokens int64  `json:"outputTokens"`
+	CacheRead    int64  `json:"cacheRead,omitempty"`
+	CacheWrite   int64  `json:"cacheWrite,omitempty"`
+}
+
+// SlashCommand 来自 ~/.claude/history.jsonl 的最近 slash 命令。
+type SlashCommand struct {
+	Command   string `json:"command"`
+	Args     string `json:"args,omitempty"`
+	Timestamp int64  `json:"timestamp"`
+	CWD      string `json:"cwd,omitempty"`
+}
+
+// SessionEvent 单条 session 事件（实时 tail / 全文读取都用这个）。
+// 简化版：保留 type + 关键字段，不完整镜像 jsonl 全部 schema。
+type SessionEvent struct {
+	Type      string             `json:"type"`
+	Subtype   string             `json:"subtype,omitempty"`
+	Timestamp int64              `json:"timestamp"`
+	Role      string             `json:"role,omitempty"` // user / assistant
+	Content   string             `json:"content,omitempty"`
+	Thinking  string             `json:"thinking,omitempty"`
+	Model     string             `json:"model,omitempty"`
+	Tokens    *SessionTokenDelta `json:"tokens,omitempty"`
+	Tool      *SessionToolUse    `json:"tool,omitempty"`
+	Error     string             `json:"error,omitempty"`
+}
+
+// SessionTokenDelta 一次 assistant 调用的 token 增量。
+type SessionTokenDelta struct {
+	Input  int64 `json:"input"`
+	Output int64 `json:"output"`
+	Cache  int64 `json:"cache,omitempty"`
+}
+
+// SessionToolUse 一次 tool 调用。
+type SessionToolUse struct {
+	Name   string `json:"name"`
+	Input  string `json:"input,omitempty"`
+	Output string `json:"output,omitempty"`
+	Status string `json:"status,omitempty"` // ok / error
 }

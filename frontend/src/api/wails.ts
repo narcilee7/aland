@@ -43,11 +43,48 @@ export interface ConfigItem {
   sensitive?: boolean
 }
 
+export interface ConfigField {
+  key: string
+  label?: string
+  description?: string
+  type: 'string' | 'number' | 'boolean' | 'enum' | 'secret' | 'json'
+  enumValues?: string[]
+  sensitive: boolean
+  editable: boolean
+  default?: unknown
+}
+
+export interface ConfigSchema {
+  fields: ConfigField[]
+}
+
 export interface ConfigDNA {
   source: string
+  schema: ConfigSchema
   surface: ConfigItem[]
   middle: ConfigItem[]
   deep: ConfigItem[]
+}
+
+// —— 能力清单（核心契约）——
+
+export interface Feature {
+  id: string
+  label: string
+  description: string
+  hasData: boolean
+}
+
+export interface Capabilities {
+  process: boolean
+  launch: boolean
+  config: boolean
+  configEdit: boolean
+  sessions: boolean
+  sessionTail: boolean
+  tokens: boolean
+  tokensLive: boolean
+  features: Feature[]
 }
 
 // —— 记忆碎片 ——
@@ -88,8 +125,11 @@ declare global {
           KillTribe(id: string): Promise<void>
           ReadTribeConfig(id: string): Promise<Record<string, unknown>>
           ReadTribeConfigDNA(id: string): Promise<ConfigDNA>
+          WriteTribeConfig(id: string, dna: ConfigDNA): Promise<void>
           GetForge(): Promise<Forge>
           GetTribeMeta(id: string): Promise<TribeMeta>
+          GetTribeCapabilities(id: string): Promise<Capabilities>
+          GetAllCapabilities(): Promise<Record<string, Capabilities>>
           ListSessions(id: string): Promise<SessionShard[]>
         }
       }
@@ -148,5 +188,33 @@ export async function listSessions(id: string): Promise<SessionShard[]> {
     return await window.go.main.App.ListSessions(id)
   } catch {
     return []
+  }
+}
+
+export async function getTribeCapabilities(id: string): Promise<Capabilities | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return await window.go.main.App.GetTribeCapabilities(id)
+  } catch {
+    return null
+  }
+}
+
+export async function getAllCapabilities(): Promise<Record<string, Capabilities>> {
+  if (!wailsAvailable()) return {}
+  try {
+    return await window.go.main.App.GetAllCapabilities()
+  } catch {
+    return {}
+  }
+}
+
+export async function writeTribeConfig(id: string, dna: ConfigDNA): Promise<boolean> {
+  if (!wailsAvailable()) return false
+  try {
+    await window.go.main.App.WriteTribeConfig(id, dna)
+    return true
+  } catch {
+    return false
   }
 }

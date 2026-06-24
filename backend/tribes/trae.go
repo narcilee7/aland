@@ -27,11 +27,30 @@ func NewTraeAdapter(home string) *TraeAdapter {
 
 func (t *TraeAdapter) ID() string      { return "trae" }
 func (t *TraeAdapter) Name() string    { return "Trae" }
-func (t *TraeAdapter) EcoType() string { return "oriental" }
+// EcoType: "ide" 同 Cursor 一样走 IDE 面板。
+func (t *TraeAdapter) EcoType() string { return "ide" }
 
 // ThemeColor 翠竹。
 func (t *TraeAdapter) ThemeColor() string  { return "#4ade80" }
 func (t *TraeAdapter) AccentColor() string { return "#86efac" }
+
+// Capabilities Trae 同 Cursor：IDE，不假装有 Session/Token。
+func (t *TraeAdapter) Capabilities() Capabilities {
+	return Capabilities{
+		Process:     true,
+		Launch:      true,
+		Config:      true,
+		ConfigEdit:  false,
+		Sessions:    false,
+		SessionTail: false,
+		Tokens:      false,
+		TokensLive:  false,
+
+		Features: []Feature{
+			{ID: FeatureExtensions, Label: "Extensions", Description: "Installed Trae extensions", HasData: false},
+		},
+	}
+}
 
 // —— Reader ——
 
@@ -55,6 +74,23 @@ func (t *TraeAdapter) ParseConfig() (map[string]any, error) {
 		return out, nil
 	}
 	return map[string]any{}, nil
+}
+
+// ParseConfigDNA 同 Cursor：所有项进 deep。
+func (t *TraeAdapter) ParseConfigDNA() (ConfigDNA, error) {
+	raw, err := t.ParseConfig()
+	if err != nil {
+		return ConfigDNA{}, err
+	}
+	dna := ConfigDNA{Source: "trae"}
+	for k, v := range raw {
+		typ := inferType(v)
+		dna.Deep = append(dna.Deep, ConfigItem{Key: k, Value: v, Type: typ, Layer: "deep"})
+		dna.Schema.Fields = append(dna.Schema.Fields, ConfigField{
+			Key: k, Type: typ, Editable: false,
+		})
+	}
+	return dna, nil
 }
 
 // —— Detector ——

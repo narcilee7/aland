@@ -226,3 +226,28 @@ func (a *App) GetTribeMeta(id string) (tribes.Meta, error) {
 	}
 	return t.Meta, nil
 }
+
+// GetTribeCapabilities 返回部落声明的能力清单。
+// 前端用这个决定渲染哪些面板（能力感知 UI）。
+func (a *App) GetTribeCapabilities(id string) (tribes.Capabilities, error) {
+	c, ok := a.land.Capabilities(id)
+	if !ok {
+		return tribes.Capabilities{}, fmt.Errorf("tribe not found: %s", id)
+	}
+	return c, nil
+}
+
+// GetAllCapabilities 一次性拿所有部落的能力（产品视角矩阵）。
+func (a *App) GetAllCapabilities() map[string]tribes.Capabilities {
+	return a.land.AllCapabilities()
+}
+
+// WriteTribeConfig 写回配置。会自动备份到 ~/.aland/backups/。
+func (a *App) WriteTribeConfig(id string, dna tribes.ConfigDNA) error {
+	w, ok := a.land.Writer(id)
+	if !ok {
+		return fmt.Errorf("tribe %s has no config writer", id)
+	}
+	core.Log.Info("write tribe config", "tribe", id, "surface", len(dna.Surface), "middle", len(dna.Middle), "deep", len(dna.Deep))
+	return w.WriteConfig(dna)
+}

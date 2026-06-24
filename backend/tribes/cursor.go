@@ -28,11 +28,33 @@ func NewCursorAdapter(home string) *CursorAdapter {
 
 func (c *CursorAdapter) ID() string      { return "cursor" }
 func (c *CursorAdapter) Name() string    { return "Cursor" }
-func (c *CursorAdapter) EcoType() string { return "modern" }
+// EcoType: "ide" 表示这是 IDE 应用，不是 CLI agent。
+// 走另一套 UI（workspace focused），不假装有 Session/Token。
+func (c *CursorAdapter) EcoType() string { return "ide" }
 
 // ThemeColor 银蓝玻璃穹顶。
 func (c *CursorAdapter) ThemeColor() string  { return "#60a5fa" }
 func (c *CursorAdapter) AccentColor() string { return "#a5d8ff" }
+
+// Capabilities Cursor 是 IDE，没有"会话"概念——老实说没有。
+// 后续可以加 Extensions / Workspaces 等 IDE 特性。
+func (c *CursorAdapter) Capabilities() Capabilities {
+	return Capabilities{
+		Process:     true,
+		Launch:      true,
+		Config:      true,
+		ConfigEdit:  false, // M2+
+		Sessions:    false, // IDE 没有会话
+		SessionTail: false,
+		Tokens:      false, // 不暴露 token（IDE 内部成本不可见）
+		TokensLive:  false,
+
+		Features: []Feature{
+			{ID: FeatureExtensions, Label: "Extensions", Description: "Installed Cursor extensions", HasData: false},
+			{ID: FeatureWorkspaces, Label: "Recent Workspaces", Description: "Recently opened folders", HasData: false},
+		},
+	}
+}
 
 // —— Reader ——
 
@@ -57,6 +79,24 @@ func (c *CursorAdapter) ParseConfig() (map[string]any, error) {
 		return out, nil
 	}
 	return map[string]any{}, nil
+}
+
+// ParseConfigDNA Cursor 的 settings.json 是用户级 IDE 配置，
+// 没有"敏感 vs 运行时"这种分层语义——所有项都进 deep 层。
+func (c *CursorAdapter) ParseConfigDNA() (ConfigDNA, error) {
+	raw, err := c.ParseConfig()
+	if err != nil {
+		return ConfigDNA{}, err
+	}
+	dna := ConfigDNA{Source: "cursor"}
+	for k, v := range raw {
+		typ := inferType(v)
+		dna.Deep = append(dna.Deep, ConfigItem{Key: k, Value: v, Type: typ, Layer: "deep"})
+		dna.Schema.Fields = append(dna.Schema.Fields, ConfigField{
+			Key: k, Type: typ, Editable: false, // IDE 暂不支持编辑
+		})
+	}
+	return dna, nil
 }
 
 // —— Detector ——

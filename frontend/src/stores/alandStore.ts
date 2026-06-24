@@ -1,10 +1,10 @@
 // Aland 全局状态。
-// 视图模式 + 部落数据 + 选中态 + Spotlight 开关。
+// 视图模式 + 部落数据 + 能力清单 + 选中态 + Spotlight/Forge 开关。
 // 用 Zustand 而不是 Redux：够用，且比 Context 更适合高频更新。
 
 import {create} from 'zustand'
-import type {Tribe, TribeMeta} from '../api/wails'
-import {getLand, getTribeMeta} from '../api/wails'
+import type {Capabilities, Tribe, TribeMeta} from '../api/wails'
+import {getAllCapabilities, getLand, getTribeMeta} from '../api/wails'
 import {onTribeBorn, onTribeDeath, onTribeVital} from '../api/events'
 import {logger} from '../lib/logger'
 
@@ -16,10 +16,12 @@ interface AlandState {
   activeTribe: string | null
   spotlight: boolean
   forgeOpen: boolean
+  matrixOpen: boolean
 
   // 大陆数据
   tribes: Record<string, Tribe>
   meta: Record<string, TribeMeta>
+  caps: Record<string, Capabilities>
 
   // 状态
   booted: boolean
@@ -32,6 +34,7 @@ interface AlandState {
   toggleSpotlight: () => void
   setSpotlight: (open: boolean) => void
   setForgeOpen: (open: boolean) => void
+  setMatrixOpen: (open: boolean) => void
 }
 
 export const useAland = create<AlandState>((set, get) => ({
@@ -39,8 +42,10 @@ export const useAland = create<AlandState>((set, get) => ({
   activeTribe: null,
   spotlight: false,
   forgeOpen: false,
+  matrixOpen: false,
   tribes: {},
   meta: {},
+  caps: {},
   booted: false,
   booting: false,
 
@@ -49,15 +54,23 @@ export const useAland = create<AlandState>((set, get) => ({
     set({booting: true})
     logger.info('aland booting')
     try {
-      // 先取大陆，再并发取每个部落的元信息
-      const land = (await getLand()) ?? {}
-      const ids = Object.keys(land)
-      const metas = await Promise.all(ids.map(id => getTribeMeta(id)))
+      // 并发：取大陆 / 全部 meta / 全部 caps
+      const [land, metas, caps] = await Promise.all([
+        getLand(),
+        Promise.resolve().then(async () => {
+          const l = (await getLand()) ?? {}
+          return Promise.all(Object.keys(l).map(id => getTribeMeta(id)))
+        }),
+        getAllCapabilities(),
+      ])
+
+      const safeLand = land ?? {}
+      const ids = Object.keys(safeLand)
       const meta: Record<string, TribeMeta> = {}
       metas.forEach((m, i) => {
         if (m) meta[ids[i]] = m
       })
-      set({tribes: land, meta, booted: true, booting: false})
+      set({tribes: safeLand, meta, caps, booted: true, booting: false})
       logger.info('aland booted', {tribes: ids.length})
 
       // 订阅实时事件
@@ -88,5 +101,9 @@ export const useAland = create<AlandState>((set, get) => ({
 
   setForgeOpen(open: boolean) {
     set({forgeOpen: open})
+  },
+
+  setMatrixOpen(open: boolean) {
+    set({matrixOpen: open})
   },
 }))

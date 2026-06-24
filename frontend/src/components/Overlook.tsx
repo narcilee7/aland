@@ -6,13 +6,14 @@ import {useAland} from '../stores/alandStore'
 import {hitTest, renderLand, type Camera} from '../canvas/IsometricEngine'
 import {DEFAULT_PLACEMENTS} from '../canvas/layouts'
 import {Button, Tooltip, TooltipContent, TooltipTrigger} from './ui'
-import {Flame} from 'lucide-react'
+import {Flame, Grid3x3} from 'lucide-react'
 
 interface OverlookProps {
   onOpenForge?: () => void
+  onOpenMatrix?: () => void
 }
 
-export function Overlook({onOpenForge}: OverlookProps = {}) {
+export function Overlook({onOpenForge, onOpenMatrix}: OverlookProps = {}) {
   const tribes = useAland(s => s.tribes)
   const meta = useAland(s => s.meta)
   const enterTribe = useAland(s => s.enterTribe)
@@ -98,7 +99,7 @@ export function Overlook({onOpenForge}: OverlookProps = {}) {
 
       {/* Forge 入口（右上角） */}
       {onOpenForge && (
-        <div className="absolute top-10 right-4 interactive">
+        <div className="absolute top-10 right-4 interactive flex flex-col gap-2 items-end">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -113,6 +114,22 @@ export function Overlook({onOpenForge}: OverlookProps = {}) {
             </TooltipTrigger>
             <TooltipContent side="left">Token 熔炉 · 今日消耗</TooltipContent>
           </Tooltip>
+          {onOpenMatrix && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onOpenMatrix}
+                  variant="outline"
+                  size="sm"
+                  className="font-mono"
+                >
+                  <Grid3x3 className="h-3 w-3" />
+                  Matrix
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">能力矩阵 · 产品视角</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       )}
 

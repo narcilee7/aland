@@ -73,24 +73,44 @@ func (t *Tribe) GetVital() VitalSign {
 type Land struct {
 	mu          sync.RWMutex
 	tribes      map[string]*Tribe
+	caps        map[string]Capabilities
 	detectors   map[string]Detector
 	launchers   map[string]Launcher
 	readers     map[string]Reader
+	writers     map[string]ConfigWriter
 	tokenStats  map[string]TokenStatReader
 	sessions    map[string]SessionLister
 	configParse map[string]ConfigParser
+
+	// 19 项能力对应的新 map
+	mcpServers   map[string]MCPServerLister
+	skills       map[string]SkillsLister
+	plans        map[string]PlanLister
+	fileHistory  map[string]FileHistoryLister
+	stats        map[string]StatsProvider
+	sessionRead  map[string]SessionReader
+	sessionStream map[string]SessionStreamer
 }
 
 // NewLand 构造一片空大陆。
 func NewLand() *Land {
 	return &Land{
-		tribes:      make(map[string]*Tribe),
-		detectors:   make(map[string]Detector),
-		launchers:   make(map[string]Launcher),
-		readers:     make(map[string]Reader),
-		tokenStats:  make(map[string]TokenStatReader),
-		sessions:    make(map[string]SessionLister),
-		configParse: make(map[string]ConfigParser),
+		tribes:        make(map[string]*Tribe),
+		caps:          make(map[string]Capabilities),
+		detectors:     make(map[string]Detector),
+		launchers:     make(map[string]Launcher),
+		readers:       make(map[string]Reader),
+		writers:       make(map[string]ConfigWriter),
+		tokenStats:    make(map[string]TokenStatReader),
+		sessions:      make(map[string]SessionLister),
+		configParse:   make(map[string]ConfigParser),
+		mcpServers:    make(map[string]MCPServerLister),
+		skills:        make(map[string]SkillsLister),
+		plans:         make(map[string]PlanLister),
+		fileHistory:   make(map[string]FileHistoryLister),
+		stats:         make(map[string]StatsProvider),
+		sessionRead:   make(map[string]SessionReader),
+		sessionStream: make(map[string]SessionStreamer),
 	}
 }
 
@@ -114,6 +134,7 @@ func (l *Land) Register(adapter any) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.tribes[m.ID] = tribe
+	l.caps[m.ID] = id.Capabilities()
 	if d, ok := adapter.(Detector); ok {
 		l.detectors[m.ID] = d
 	}
@@ -122,6 +143,9 @@ func (l *Land) Register(adapter any) error {
 	}
 	if r, ok := adapter.(Reader); ok {
 		l.readers[m.ID] = r
+	}
+	if w, ok := adapter.(ConfigWriter); ok {
+		l.writers[m.ID] = w
 	}
 	if t, ok := adapter.(TokenStatReader); ok {
 		l.tokenStats[m.ID] = t
@@ -132,6 +156,27 @@ func (l *Land) Register(adapter any) error {
 	if cp, ok := adapter.(ConfigParser); ok {
 		l.configParse[m.ID] = cp
 	}
+	if mcp, ok := adapter.(MCPServerLister); ok {
+		l.mcpServers[m.ID] = mcp
+	}
+	if sk, ok := adapter.(SkillsLister); ok {
+		l.skills[m.ID] = sk
+	}
+	if pl, ok := adapter.(PlanLister); ok {
+		l.plans[m.ID] = pl
+	}
+	if fh, ok := adapter.(FileHistoryLister); ok {
+		l.fileHistory[m.ID] = fh
+	}
+	if st, ok := adapter.(StatsProvider); ok {
+		l.stats[m.ID] = st
+	}
+	if sr, ok := adapter.(SessionReader); ok {
+		l.sessionRead[m.ID] = sr
+	}
+	if ss, ok := adapter.(SessionStreamer); ok {
+		l.sessionStream[m.ID] = ss
+	}
 	return nil
 }
 
@@ -141,6 +186,89 @@ func (l *Land) TokenStat(id string) (TokenStatReader, bool) {
 	defer l.mu.RUnlock()
 	t, ok := l.tokenStats[id]
 	return t, ok
+}
+
+// Writer 取出一个部落的配置写入器。
+func (l *Land) Writer(id string) (ConfigWriter, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	w, ok := l.writers[id]
+	return w, ok
+}
+
+// Capabilities 取出一个部落声明的能力。
+func (l *Land) Capabilities(id string) (Capabilities, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	c, ok := l.caps[id]
+	return c, ok
+}
+
+// AllCapabilities 取出所有部落的能力（用于能力矩阵视图）。
+func (l *Land) AllCapabilities() map[string]Capabilities {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	out := make(map[string]Capabilities, len(l.caps))
+	for id, c := range l.caps {
+		out[id] = c
+	}
+	return out
+}
+
+// MCPServers 取出一个部落的 MCP servers 列表器。
+func (l *Land) MCPServers(id string) (MCPServerLister, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	m, ok := l.mcpServers[id]
+	return m, ok
+}
+
+// Skills 同上。
+func (l *Land) Skills(id string) (SkillsLister, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	s, ok := l.skills[id]
+	return s, ok
+}
+
+// Plans 同上。
+func (l *Land) Plans(id string) (PlanLister, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	p, ok := l.plans[id]
+	return p, ok
+}
+
+// FileHistory 同上。
+func (l *Land) FileHistory(id string) (FileHistoryLister, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	f, ok := l.fileHistory[id]
+	return f, ok
+}
+
+// Stats 同上。
+func (l *Land) Stats(id string) (StatsProvider, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	s, ok := l.stats[id]
+	return s, ok
+}
+
+// SessionRead 同上。
+func (l *Land) SessionRead(id string) (SessionReader, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	s, ok := l.sessionRead[id]
+	return s, ok
+}
+
+// SessionStream 同上。
+func (l *Land) SessionStream(id string) (SessionStreamer, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	s, ok := l.sessionStream[id]
+	return s, ok
 }
 
 // Sessions 取出一个部落的会话列表器。

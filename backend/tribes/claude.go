@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/narcilee7/aland/backend/core"
 )
 
 // ClaudeAdapter 适配 Claude Code CLI。
@@ -40,6 +42,29 @@ func (c *ClaudeAdapter) EcoType() string { return "classical" }
 // ThemeColor 琥珀金。
 func (c *ClaudeAdapter) ThemeColor() string  { return "#d4a853" }
 func (c *ClaudeAdapter) AccentColor() string { return "#ffdf80" }
+
+// Capabilities 报家门：Claude Code 是 A 级 CLI agent，全套能力都具备。
+// SessionTail / TokensLive 留 false，等实时流模块做完再翻 true。
+func (c *ClaudeAdapter) Capabilities() Capabilities {
+	return Capabilities{
+		Process:     true,
+		Launch:      true,
+		Config:      true,
+		ConfigEdit:  true, // 本轮要做透
+		Sessions:    true,
+		SessionTail: false, // TODO: M2 killer
+		Tokens:      true,
+		TokensLive:  false, // TODO: M2
+
+		Features: []Feature{
+			{ID: FeatureMCPServers, Label: "MCP Servers", Description: "Model Context Protocol servers configured for this CLI", HasData: true},
+			{ID: FeatureSkills, Label: "Skills", Description: "Custom slash commands and skills loaded", HasData: true},
+			{ID: FeaturePlugins, Label: "Plugins", Description: "Enabled plugins (LSP, hooks, etc.)", HasData: true},
+			{ID: FeaturePlans, Label: "Plan Files", Description: "Plan mode artifacts", HasData: true},
+			{ID: FeatureFileHistory, Label: "File History", Description: "Tracked file backups and edits", HasData: false},
+		},
+	}
+}
 
 // —— 内部 helper ——
 
@@ -503,8 +528,9 @@ func scanTokensInSession(path string) sessionTokens {
 // —— ConfigParser（设计 doc 提到的 Config DNA / 三层）——
 
 // ParseConfigDNA 解析 settings.json，按 key 前缀分到三层。
+// 同时构建 Schema，让前端能 schema-driven 渲染。
 //   - surface: model / 运行时
-//   - middle:  permissions / API
+//   - middle:  permissions / API / TOKEN
 //   - deep:    其他（plugins、统计等元信息）
 func (c *ClaudeAdapter) ParseConfigDNA() (ConfigDNA, error) {
 	raw, err := c.ParseConfig()
@@ -512,17 +538,118 @@ func (c *ClaudeAdapter) ParseConfigDNA() (ConfigDNA, error) {
 		return ConfigDNA{}, err
 	}
 	dna := ConfigDNA{Source: filepath.Join(c.claudeHome(), "settings.json")}
+
+	// schema 字段的元信息表
+	fieldMeta := map[string]ConfigField{
+		"model": {
+			Key: "model", Label: "Default Model",
+			Description: "Model ID used for new sessions",
+			Type: "string", Editable: true,
+		},
+		"env": {
+			Key: "env", Label: "Environment Variables",
+			Description: "Custom env vars passed to Claude (includes API keys)",
+			Type: "json", Editable: true,
+		},
+		"enabledPlugins": {
+			Key: "enabledPlugins", Label: "Enabled Plugins",
+			Description: "Map of plugin name to enabled state",
+			Type: "json", Editable: true,
+		},
+		"permissions": {
+			Key: "permissions", Label: "Permissions",
+			Description: "Tool and file access permissions",
+			Type: "json", Editable: true,
+		},
+	}
+
 	for k, v := range raw {
+		typ := inferType(v)
+		meta, hasMeta := fieldMeta[k]
+		if !hasMeta {
+			meta = ConfigField{Key: k, Type: typ, Editable: true}
+		} else {
+			meta.Type = typ
+		}
+
 		switch {
 		case strings.HasPrefix(k, "model"):
-			dna.Surface = append(dna.Surface, ConfigItem{Key: k, Value: v, Type: inferType(v), Layer: "surface"})
-		case strings.HasPrefix(k, "permission"), strings.Contains(k, "API"), strings.Contains(k, "TOKEN"):
-			dna.Middle = append(dna.Middle, ConfigItem{Key: k, Value: v, Type: inferType(v), Layer: "middle", Sensitive: true})
+			dna.Surface = append(dna.Surface, ConfigItem{Key: k, Value: v, Type: typ, Layer: "surface"})
+		case strings.HasPrefix(k, "permission"), strings.Contains(k, "API"), strings.Contains(k, "TOKEN"), strings.Contains(k, "AUTH"):
+			meta.Sensitive = true
+			meta.Type = "secret"
+			dna.Middle = append(dna.Middle, ConfigItem{Key: k, Value: v, Type: typ, Layer: "middle", Sensitive: true})
 		default:
-			dna.Deep = append(dna.Deep, ConfigItem{Key: k, Value: v, Type: inferType(v), Layer: "deep"})
+			dna.Deep = append(dna.Deep, ConfigItem{Key: k, Value: v, Type: typ, Layer: "deep"})
 		}
+		dna.Schema.Fields = append(dna.Schema.Fields, meta)
 	}
 	return dna, nil
+}
+
+// WriteConfig 把 ConfigDNA 写回 settings.json。
+// 修改前自动备份到 ~/.aland/backups/settings-<unix>.json。
+// 原子写：先写临时文件，再 rename，避免半写状态。
+func (c *ClaudeAdapter) WriteConfig(dna ConfigDNA) error {
+	src := filepath.Join(c.claudeHome(), "settings.json")
+
+	// 1. 读现有 raw（保留未在 dna 里出现的 key）
+	existing := map[string]any{}
+	if data, err := os.ReadFile(src); err == nil {
+		_ = json.Unmarshal(data, &existing)
+	}
+
+	// 2. 合并 dna 的三层回 existing
+	for _, item := range dna.Surface {
+		existing[item.Key] = item.Value
+	}
+	for _, item := range dna.Middle {
+		existing[item.Key] = item.Value
+	}
+	for _, item := range dna.Deep {
+		existing[item.Key] = item.Value
+	}
+
+	// 3. 备份当前
+	if err := c.backupConfig(src); err != nil {
+		core.Log.Warn("config backup failed", "err", err, "path", src)
+		// 备份失败不阻塞写——但要 log
+	}
+
+	// 4. 原子写
+	data, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := src + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, src)
+}
+
+// backupConfig 复制文件到 ~/.aland/backups/<basename>-<unix>.json。
+func (c *ClaudeAdapter) backupConfig(src string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(home, ".aland", "backups")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	base := filepath.Base(src)
+	stamp := time.Now().Unix()
+	dst := filepath.Join(dir, fmt.Sprintf("%s-%d", base, stamp))
+
+	data, err := os.ReadFile(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.WriteFile(dst, data, 0o600)
 }
 
 func inferType(v any) string {
