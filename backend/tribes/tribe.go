@@ -27,11 +27,22 @@ type VitalSign struct {
 }
 
 // Tribe 大陆上的一个部落。纯数据结构，不引用任何适配器。
+// mu 是指针，原因是 Snapshot() 会按值复制 Tribe——若 mu 是值类型，复制会
+// 共享锁状态（go vet 会报 "copies lock"），导致后续锁操作作用在错误的实例上。
 type Tribe struct {
 	Meta   Meta      `json:"meta"`
 	Status Status    `json:"status"`
 	Vital  VitalSign `json:"vital"`
-	mu     sync.RWMutex
+	mu     *sync.RWMutex
+}
+
+// newTribe 构造一个带锁的部落。
+func newTribe(m Meta) *Tribe {
+	return &Tribe{
+		Meta:   m,
+		Status: StatusIdle,
+		mu:     &sync.RWMutex{},
+	}
 }
 
 // SetVital 线程安全地更新生命体征，并根据 CPU 推算状态。
@@ -92,7 +103,7 @@ func (l *Land) Register(adapter any) error {
 		ThemeColor:  id.ThemeColor(),
 		AccentColor: id.AccentColor(),
 	}
-	tribe := &Tribe{Meta: m, Status: StatusIdle}
+	tribe := newTribe(m)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
