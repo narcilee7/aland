@@ -228,6 +228,35 @@ export interface EyeState {
   updatedAt: number
 }
 
+// —— Claude Hooks ——
+
+// Claude Code 通过 stdin 传给 hook 的 JSON。
+// 字段是"广覆盖"——所有事件共有 + 各事件特有。
+// 参考 backend/hooks/types.go HookPayload。
+export interface HookPayload {
+  sessionId?: string
+  transcriptPath?: string
+  cwd?: string
+  hookEventName?: string
+  toolName?: string
+  toolInput?: Record<string, unknown>
+  toolResponse?: Record<string, unknown>
+  notificationType?: string
+  message?: string
+  stopReason?: string
+  agentId?: string
+  agentType?: string
+  agentTranscriptPath?: string
+  userPrompt?: string
+  trigger?: string
+  customInstructions?: string
+}
+
+export interface HooksInstallResult {
+  added: string[]
+  skipped: string[]
+}
+
 // —— 类型安全的 Wails 桥 ——
 
 declare global {
@@ -264,6 +293,12 @@ declare global {
           GetEyeState(): Promise<EyeState>
           ConsumeEyeFlash(id: string): Promise<boolean>
           ClearEyeFlashes(): Promise<void>
+
+          // Claude Hooks
+          InstallHooks(): Promise<HooksInstallResult>
+          UninstallHooks(): Promise<HooksInstallResult>
+          IsHooksInstalled(): Promise<boolean>
+          HookServerPort(): Promise<number>
         }
       }
     }
@@ -423,5 +458,43 @@ export async function clearEyeFlashes(): Promise<void> {
     await window.go.backend.App.ClearEyeFlashes()
   } catch {
     /* noop */
+  }
+}
+
+// —— Claude Hooks API ——
+
+export async function installHooks(): Promise<HooksInstallResult | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<HooksInstallResult>(await window.go.backend.App.InstallHooks())
+  } catch {
+    return null
+  }
+}
+
+export async function uninstallHooks(): Promise<HooksInstallResult | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<HooksInstallResult>(await window.go.backend.App.UninstallHooks())
+  } catch {
+    return null
+  }
+}
+
+export async function isHooksInstalled(): Promise<boolean> {
+  if (!wailsAvailable()) return false
+  try {
+    return await window.go.backend.App.IsHooksInstalled()
+  } catch {
+    return false
+  }
+}
+
+export async function hookServerPort(): Promise<number> {
+  if (!wailsAvailable()) return 0
+  try {
+    return await window.go.backend.App.HookServerPort()
+  } catch {
+    return 0
   }
 }

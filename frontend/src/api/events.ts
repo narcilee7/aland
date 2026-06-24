@@ -1,7 +1,7 @@
 // 前端事件层——与后端 events/events.go 严格对齐。
 // 改一处记着改另一处（强约束：常量值必须完全一致）。
 
-import type {EyeMode, Flash, SessionEvent, Tribe} from './wails'
+import type {EyeMode, Flash, HookPayload, SessionEvent, Tribe} from './wails'
 import {toCamel} from '../lib/camel'
 
 // 事件名常量。
@@ -14,6 +14,7 @@ export const EventName = {
   SessionEvent: 'session:event',
   EyeUpdate: 'eye:update',
   EyeFlash: 'eye:flash',
+  HookEvent: 'claude:hook',
 } as const
 
 export type EventName = (typeof EventName)[keyof typeof EventName]
@@ -86,3 +87,6 @@ export const onEyeUpdate = (cb: (e: EyeUpdateEvent) => void) =>
 
 export const onEyeFlash = (cb: (e: EyeFlashEvent) => void) =>
   on<EyeFlashEvent>(EventName.EyeFlash, e => cb(toCamel<EyeFlashEvent>(e)))
+
+export const onHook = (cb: (p: HookPayload) => void) =>
+  on<HookPayload>(EventName.HookEvent, p => cb(toCamel<HookPayload>(p)))

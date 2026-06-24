@@ -3,7 +3,7 @@
 // 用 Zustand 而不是 Redux：够用，且比 Context 更适合高频更新。
 
 import {create} from 'zustand'
-import type {Capabilities, EyeState, Tribe, TribeMeta} from '../api/wails'
+import type {Capabilities, EyeState, HookPayload, Tribe, TribeMeta} from '../api/wails'
 import {
   clearEyeFlashes,
   consumeEyeFlash,
@@ -13,7 +13,7 @@ import {
   getTribeMeta,
   wailsAvailable,
 } from '../api/wails'
-import {onEyeFlash, onEyeUpdate, onTribeBorn, onTribeDeath, onTribeVital} from '../api/events'
+import {onEyeFlash, onEyeUpdate, onHook, onTribeBorn, onTribeDeath, onTribeVital} from '../api/events'
 import {logger} from '../lib/logger'
 
 /**
@@ -67,6 +67,12 @@ interface AlandState {
   // 灵动岛 (Eye)
   eye: EyeState
 
+  // Claude Hooks 工具链
+  toolChain: {
+    nodes: ToolNode[]
+    maxNodes: number
+  }
+
   // 状态
   booted: boolean
   booting: boolean
@@ -82,6 +88,20 @@ interface AlandState {
   setEyeOpen: (open: boolean) => void
   consumeFlash: (id: string) => Promise<void>
   clearFlashes: () => Promise<void>
+  addToolNode: (p: HookPayload) => void
+  clearToolChain: () => void
+}
+
+// ToolNode 是工具链里的一个节点——来自一次 hook 事件。
+export interface ToolNode {
+  id: string
+  event: string // PreToolUse / PostToolUse / Notification / ...
+  toolName?: string
+  toolInput?: Record<string, unknown>
+  toolResponse?: Record<string, unknown>
+  message?: string
+  userPrompt?: string
+  at: number
 }
 
 const initialEye: EyeState = {
@@ -90,6 +110,8 @@ const initialEye: EyeState = {
   flashing: [],
   updatedAt: 0,
 }
+
+const TOOL_CHAIN_MAX = 100
 
 export const useAland = create<AlandState>((set, get) => ({
   view: 'overlook',
@@ -102,6 +124,7 @@ export const useAland = create<AlandState>((set, get) => ({
   meta: {},
   caps: {},
   eye: initialEye,
+  toolChain: {nodes: [], maxNodes: TOOL_CHAIN_MAX},
   booted: false,
   booting: false,
 
@@ -158,6 +181,9 @@ export const useAland = create<AlandState>((set, get) => ({
       onEyeFlash(e =>
         set(s => ({eye: {...s.eye, flashing: [...s.eye.flashing, e.flash].slice(-16)}})),
       )
+
+      // 订阅 Claude Hook 事件 → 入工具链
+      onHook(p => get().addToolNode(p))
     } catch (e) {
       logger.error('aland boot failed', e)
       set({booting: false})
@@ -201,5 +227,28 @@ export const useAland = create<AlandState>((set, get) => ({
   async clearFlashes() {
     set(s => ({eye: {...s.eye, flashing: []}}))
     await clearEyeFlashes()
+  },
+
+  addToolNode(p) {
+    const node: ToolNode = {
+      id: `${p.hookEventName ?? 'ev'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      event: p.hookEventName ?? 'unknown',
+      toolName: p.toolName,
+      toolInput: p.toolInput,
+      toolResponse: p.toolResponse,
+      message: p.message,
+      userPrompt: p.userPrompt,
+      at: Date.now(),
+    }
+    set(s => ({
+      toolChain: {
+        maxNodes: s.toolChain.maxNodes,
+        nodes: [...s.toolChain.nodes, node].slice(-s.toolChain.maxNodes),
+      },
+    }))
+  },
+
+  clearToolChain() {
+    set(s => ({toolChain: {...s.toolChain, nodes: []}}))
   },
 }))
