@@ -1,0 +1,150 @@
+// TribeDock 右侧面板——所有部落的快速入口。
+// 核心改动：让用户一眼看到 Claude 在哪、能不能进。
+
+import {useAland} from '../stores/alandStore'
+import {Badge} from './ui'
+import {ArrowRight, MapPin} from 'lucide-react'
+import type {Tribe} from '../api/wails'
+
+interface TribeDockProps {
+  onOpenForge?: () => void
+  onOpenMatrix?: () => void
+  onOpenSpotlight?: () => void
+}
+
+export function TribeDock({onOpenForge, onOpenMatrix, onOpenSpotlight}: TribeDockProps) {
+  const tribes = useAland(s => s.tribes)
+  const meta = useAland(s => s.meta)
+  const enterTribe = useAland(s => s.enterTribe)
+
+  const list = Object.values(meta).map(m => ({
+    meta: m,
+    tribe: tribes[m.id],
+  }))
+
+  // 排序：running 优先，然后按 mtime（这里没有 mtime，按 id 稳定排序）
+  list.sort((a, b) => {
+    const aRun = a.tribe?.status === 'running' || a.tribe?.status === 'busy' ? 1 : 0
+    const bRun = b.tribe?.status === 'running' || b.tribe?.status === 'busy' ? 1 : 0
+    return bRun - aRun
+  })
+
+  const runningCount = list.filter(l => l.tribe?.status === 'running' || l.tribe?.status === 'busy').length
+
+  return (
+    <div className="absolute right-4 top-16 bottom-8 w-72 flex flex-col gap-2 z-20 pointer-events-none">
+      {/* 工具栏 */}
+      <div className="rounded-lg border border-white/5 bg-land-2/70 backdrop-blur p-2 flex gap-1 pointer-events-auto">
+        {onOpenSpotlight && (
+          <button
+            onClick={onOpenSpotlight}
+            className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
+            title="Cmd+Shift+A"
+          >
+            ⌘⇧A
+          </button>
+        )}
+        {onOpenForge && (
+          <button
+            onClick={onOpenForge}
+            className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
+          >
+            Forge
+          </button>
+        )}
+        {onOpenMatrix && (
+          <button
+            onClick={onOpenMatrix}
+            className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
+          >
+            Matrix
+          </button>
+        )}
+      </div>
+
+      {/* Now Active 提示 */}
+      {runningCount > 0 && (
+        <div className="rounded-lg border border-forge-green/30 bg-forge-green/5 backdrop-blur px-3 py-2 pointer-events-auto">
+          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-forge-green">
+            <span className="h-1.5 w-1.5 rounded-full bg-forge-green animate-pulse" />
+            {runningCount} ACTIVE
+          </div>
+        </div>
+      )}
+
+      {/* 部落列表 */}
+      <div className="flex-1 rounded-lg border border-white/5 bg-land-2/40 backdrop-blur p-2 space-y-1.5 overflow-y-auto pointer-events-auto">
+        {list.length === 0 ? (
+          <div className="text-ink-faint text-xs font-mono py-4 text-center">
+            没有部落
+          </div>
+        ) : (
+          list.map(({meta: m, tribe}) => (
+            <TribeCard key={m.id} tribe={tribe} onEnter={() => enterTribe(m.id)} />
+          ))
+        )}
+      </div>
+
+      {/* 底部提示 */}
+      <div className="text-[9px] font-mono uppercase tracking-wider text-ink-faint/50 text-center pointer-events-auto">
+        <MapPin className="inline h-2.5 w-2.5 mr-1" />
+        click map or card
+      </div>
+    </div>
+  )
+}
+
+function TribeCard({tribe, onEnter}: {tribe: Tribe | undefined; onEnter: () => void}) {
+  const isRunning = tribe?.status === 'running' || tribe?.status === 'busy'
+  const cpu = tribe?.vital.cpu ?? 0
+  const mem = tribe?.vital.memory ?? 0
+  const pid = tribe?.vital.pid ?? 0
+
+  return (
+    <button
+      onClick={onEnter}
+      className={`interactive group w-full text-left rounded-md p-2.5 transition-all border ${
+        isRunning
+          ? 'border-forge-green/30 bg-forge-green/5 hover:bg-forge-green/10 hover:border-forge-green/50'
+          : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10'
+      }`}
+      style={
+        {
+          ['--tribe-theme' as string]: tribe?.meta.themeColor ?? '#666',
+        } as React.CSSProperties
+      }
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          className="h-2 w-2 rounded-full shrink-0"
+          style={{
+            backgroundColor: tribe?.meta.themeColor ?? '#666',
+            boxShadow: isRunning ? `0 0 8px ${tribe?.meta.themeColor ?? '#666'}` : 'none',
+          }}
+        />
+        <span className="text-sm text-ink font-mono font-medium flex-1 truncate">
+          {tribe?.meta.name ?? '—'}
+        </span>
+        {tribe && <Badge status={tribe.status} />}
+        <ArrowRight className="h-3 w-3 text-ink-faint opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+      <div className="flex items-center gap-3 text-[10px] font-mono text-ink-faint">
+        <span className="uppercase tracking-wider">{tribe?.meta.eco ?? '—'}</span>
+        {pid > 0 && (
+          <>
+            <span>·</span>
+            <span className="text-ink-dim">PID {pid}</span>
+          </>
+        )}
+        {isRunning && (
+          <>
+            <span>·</span>
+            <span className="text-forge-amber">{cpu.toFixed(0)}% CPU</span>
+            <span>·</span>
+            <span>{mem.toFixed(0)}MB</span>
+          </>
+        )}
+      </div>
+    </button>
+  )
+}

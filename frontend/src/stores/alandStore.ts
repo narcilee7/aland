@@ -4,9 +4,41 @@
 
 import {create} from 'zustand'
 import type {Capabilities, Tribe, TribeMeta} from '../api/wails'
-import {getAllCapabilities, getLand, getTribeMeta} from '../api/wails'
+import {getAllCapabilities, getLand, getTribeMeta, wailsAvailable} from '../api/wails'
 import {onTribeBorn, onTribeDeath, onTribeVital} from '../api/events'
 import {logger} from '../lib/logger'
+
+/**
+ * 等 Wails runtime 注入到 window.go。
+ * bundled app 启动慢，window.go 可能在 boot 第一次跑时还没 ready。
+ */
+async function waitForWails(timeoutMs: number): Promise<boolean> {
+  const start = Date.now()
+  let attempt = 0
+  while (Date.now() - start < timeoutMs) {
+    if (wailsAvailable()) return true
+    attempt++
+    if (attempt % 10 === 0) {
+      // 每秒 log 一次当前状态（方便 debug 是否在 wails runtime 里）
+      const inWails = typeof window !== 'undefined' && !!window.go
+      const hasBackend = typeof window !== 'undefined' && !!window.go?.backend
+      const goKeys = typeof window !== 'undefined' && window.go ? Object.keys(window.go) : []
+      logger.info('waiting for wails runtime', {
+        attempt,
+        inWails,
+        hasBackend,
+        goKeys,
+        hint: !inWails
+          ? '不在 Wails webview 里——是不是在普通浏览器？'
+          : !hasBackend
+            ? 'window.go 有但没 backend 键——包名匹配？'
+            : 'window.go.backend 有但 .App 是 undefined',
+      })
+    }
+    await new Promise(r => setTimeout(r, 100))
+  }
+  return false
+}
 
 export type View = 'overlook' | 'tribe'
 
@@ -52,25 +84,40 @@ export const useAland = create<AlandState>((set, get) => ({
   async boot() {
     if (get().booted || get().booting) return
     set({booting: true})
-    logger.info('aland booting')
+    logger.info('aland booting', {
+      href: typeof window !== 'undefined' ? window.location.href : '(no window)',
+    })
+
+    // 等 Wails runtime 注入（最多 15 秒）
+    const wailsReady = await waitForWails(15000)
+    if (!wailsReady) {
+      const inWails = typeof window !== 'undefined' && !!window.go
+      logger.error('wails runtime not ready after 15s', {
+        inWails,
+        hint: inWails
+          ? 'window.go 存在但 window.go.backend.App 找不到——路径错？'
+          : 'window.go 完全不存在——你在浏览器里打开的？要在 Aland .app 窗口里看',
+      })
+      set({booting: false})
+      return
+    }
+
     try {
-      // 并发：取大陆 / 全部 meta / 全部 caps
-      const [land, metas, caps] = await Promise.all([
-        getLand(),
-        Promise.resolve().then(async () => {
-          const l = (await getLand()) ?? {}
-          return Promise.all(Object.keys(l).map(id => getTribeMeta(id)))
-        }),
+      // 1. 拉大陆
+      const land = (await getLand()) ?? {}
+      const ids = Object.keys(land)
+
+      // 2. 并发拉每个部落的 meta + caps
+      const [metas, caps] = await Promise.all([
+        Promise.all(ids.map(id => getTribeMeta(id))),
         getAllCapabilities(),
       ])
 
-      const safeLand = land ?? {}
-      const ids = Object.keys(safeLand)
       const meta: Record<string, TribeMeta> = {}
       metas.forEach((m, i) => {
         if (m) meta[ids[i]] = m
       })
-      set({tribes: safeLand, meta, caps, booted: true, booting: false})
+      set({tribes: land, meta, caps, booted: true, booting: false})
       logger.info('aland booted', {tribes: ids.length})
 
       // 订阅实时事件

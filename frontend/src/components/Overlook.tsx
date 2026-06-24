@@ -1,22 +1,23 @@
 // 大陆俯瞰——主界面。
-// Canvas 渲染等距地图，hover 高亮，点击进入部落。
+// 地图 + 右侧 TribeDock 双视图，hover 高亮，点击进入部落。
 
 import {useEffect, useRef, useState} from 'react'
 import {useAland} from '../stores/alandStore'
 import {hitTest, renderLand, type Camera} from '../canvas/IsometricEngine'
 import {DEFAULT_PLACEMENTS} from '../canvas/layouts'
-import {Button, Tooltip, TooltipContent, TooltipTrigger} from './ui'
-import {Flame, Grid3x3} from 'lucide-react'
+import {TribeDock} from './TribeDock'
 
 interface OverlookProps {
   onOpenForge?: () => void
   onOpenMatrix?: () => void
+  onOpenSpotlight?: () => void
 }
 
-export function Overlook({onOpenForge, onOpenMatrix}: OverlookProps = {}) {
+export function Overlook({onOpenForge, onOpenMatrix, onOpenSpotlight}: OverlookProps = {}) {
   const tribes = useAland(s => s.tribes)
   const meta = useAland(s => s.meta)
   const enterTribe = useAland(s => s.enterTribe)
+  const toggleSpotlight = useAland(s => s.toggleSpotlight)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [hover, setHover] = useState<string | null>(null)
@@ -77,10 +78,6 @@ export function Overlook({onOpenForge, onOpenMatrix}: OverlookProps = {}) {
     if (hover) enterTribe(hover)
   }
 
-  const runningCount = Object.values(tribes).filter(
-    t => t.status === 'running' || t.status === 'busy',
-  ).length
-
   return (
     <div className="relative w-full h-full">
       <canvas
@@ -92,79 +89,26 @@ export function Overlook({onOpenForge, onOpenMatrix}: OverlookProps = {}) {
       />
 
       {/* 顶部罗盘 */}
-      <div className="draggable absolute top-0 inset-x-0 h-8 flex items-center justify-between px-4 font-mono text-[11px] tracking-wider text-ink-dim pointer-events-none">
+      <div className="draggable absolute top-0 left-0 h-8 flex items-center px-4 font-mono text-[11px] tracking-wider text-ink-dim pointer-events-none">
         <span>Aland · Agent Land</span>
+      </div>
+
+      {/* 顶部时间 */}
+      <div className="draggable absolute top-0 left-1/2 -translate-x-1/2 h-8 flex items-center px-4 font-mono text-[11px] tracking-wider text-ink-dim pointer-events-none">
         <span>{new Date().toLocaleTimeString()}</span>
       </div>
 
-      {/* Forge 入口（右上角） */}
-      {onOpenForge && (
-        <div className="absolute top-10 right-4 interactive flex flex-col gap-2 items-end">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={onOpenForge}
-                variant="outline"
-                size="sm"
-                className="font-mono"
-              >
-                <Flame className="h-3 w-3" />
-                Forge
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">Token 熔炉 · 今日消耗</TooltipContent>
-          </Tooltip>
-          {onOpenMatrix && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={onOpenMatrix}
-                  variant="outline"
-                  size="sm"
-                  className="font-mono"
-                >
-                  <Grid3x3 className="h-3 w-3" />
-                  Matrix
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">能力矩阵 · 产品视角</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      )}
+      {/* 右侧 TribeDock：所有部落 + 工具栏 + Active 提示 */}
+      <TribeDock
+        onOpenForge={onOpenForge}
+        onOpenMatrix={onOpenMatrix}
+        onOpenSpotlight={onOpenSpotlight ?? toggleSpotlight}
+      />
 
-      {/* hover 提示 */}
-      {hover && meta[hover] && (
-        <div
-          className="interactive absolute bottom-12 left-1/2 -translate-x-1/2"
-          style={
-            {
-              // 动态注入部落色到 CSS 变量
-              ['--tribe-theme' as string]: meta[hover].themeColor,
-              ['--tribe-accent' as string]: meta[hover].accentColor,
-            } as React.CSSProperties
-          }
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={onClick} variant="default" size="md">
-                {meta[hover].name} · click to enter →
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              按 <kbd className="rounded bg-white/10 px-1">⌘⇧A</kbd> 随时唤起 Spotlight
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      )}
-
-      {/* 底部状态栏 */}
-      <div className="draggable absolute bottom-0 inset-x-0 h-6 flex items-center justify-center gap-6 font-mono text-[10px] tracking-wider text-ink-faint pointer-events-none">
-        <span>TRIBES: {Object.keys(tribes).length || 0}</span>
-        <span className="text-ink-faint/40">·</span>
-        <span>RUNNING: {runningCount}</span>
-        <span className="text-ink-faint/40">·</span>
-        <span>{meta[hover ?? ''] ? `HOVER: ${meta[hover ?? ''].eco.toUpperCase()}` : 'IDLE'}</span>
+      {/* 底部：Cmd+Shift+A 提示 */}
+      <div className="draggable absolute bottom-2 left-4 font-mono text-[10px] tracking-wider text-ink-faint/60 pointer-events-none">
+        <kbd className="rounded bg-white/5 border border-white/10 px-1.5 py-0.5 mr-1.5">⌘⇧A</kbd>
+        Spotlight
       </div>
     </div>
   )

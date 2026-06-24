@@ -30,6 +30,7 @@ function App() {
         <Overlook
           onOpenForge={() => setForgeOpen(true)}
           onOpenMatrix={() => setMatrixOpen(true)}
+          onOpenSpotlight={() => useAland.getState().setSpotlight(true)}
         />
 
         {/* 部落视图 */}
@@ -59,9 +60,16 @@ function App() {
 
         {/* 启动加载 */}
         {!booted && (
-          <div className="draggable absolute inset-0 z-40 flex items-center justify-center bg-land-1/80 backdrop-blur-sm font-mono text-xs uppercase tracking-widest text-ink-dim">
-            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-            {booting ? 'Awakening the land…' : 'Standby'}
+          <div className="draggable absolute inset-0 z-40 flex flex-col items-center justify-center bg-land-1/80 backdrop-blur-sm font-mono text-xs uppercase tracking-widest text-ink-dim gap-2">
+            <div className="flex items-center">
+              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+              {booting ? 'Awakening the land…' : 'Wails runtime not detected'}
+            </div>
+            {!booting && (
+              <div className="normal-case tracking-normal text-[10px] text-ink-faint text-center max-w-md px-4">
+                在 Aland 窗口里打开，不是浏览器。Console.app 看 aland 日志。
+              </div>
+            )}
           </div>
         )}
       </div>
