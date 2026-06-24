@@ -26,8 +26,9 @@ import {
 import { onSessionEvent } from '../api/events'
 import { streamLatestSession, stopLatestSession } from '../api/wails'
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from './ui'
-import { Plug, Sparkles, Wrench, FileText, History, RotateCcw, Activity, Terminal, Play, Square, Coins, Hammer } from 'lucide-react'
+import { Plug, Sparkles, Wrench, FileText, History, RotateCcw, Activity, Terminal, Play, Square, Coins, Hammer, Shield } from 'lucide-react'
 import { ToolChain } from './ToolChain'
+import { PermissionsPanel } from './PermissionsPanel'
 import { logger } from '../lib/logger'
 
 interface InsightsProps {
@@ -41,7 +42,7 @@ interface InsightsProps {
 }
 
 export function Insights({ tribeId, caps }: InsightsProps) {
-  const [tab, setTab] = useState<'mcp' | 'skills' | 'plugins' | 'plans' | 'history' | 'activity' | 'tail' | 'chain'>('mcp')
+  const [tab, setTab] = useState<'mcp' | 'skills' | 'plugins' | 'plans' | 'history' | 'activity' | 'tail' | 'chain' | 'perms'>('mcp')
 
   return (
     <Card className="flex flex-col min-h-0">
@@ -87,6 +88,10 @@ export function Insights({ tribeId, caps }: InsightsProps) {
             <Hammer className="h-3 w-3" />
             Chain
           </TabBtn>
+          <TabBtn active={tab === 'perms'} onClick={() => setTab('perms')}>
+            <Shield className="h-3 w-3" />
+            Perms
+          </TabBtn>
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-auto min-h-0">
@@ -98,6 +103,7 @@ export function Insights({ tribeId, caps }: InsightsProps) {
         {tab === 'activity' && <ActivityTab tribeId={tribeId} />}
         {tab === 'tail' && <LiveTailTab tribeId={tribeId} />}
         {tab === 'chain' && <ToolChain />}
+        {tab === 'perms' && <PermissionsPanel />}
       </CardContent>
     </Card>
   )

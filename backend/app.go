@@ -508,3 +508,13 @@ func (a *App) HookServerPort() int {
 	}
 	return a.hookSrv.Port()
 }
+
+// GetPermissions 读取 ~/.claude/settings.json 的 permissions 字段。
+func (a *App) GetPermissions() (hooks.Permissions, error) {
+	return hooks.ReadPermissions()
+}
+
+// TogglePermission 切换一条规则在某类（allow/deny/ask）下的存在状态。
+func (a *App) TogglePermission(category, rule string) (hooks.Permissions, error) {
+	return hooks.TogglePermission(category, rule)
+}

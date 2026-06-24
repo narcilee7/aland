@@ -257,6 +257,13 @@ export interface HooksInstallResult {
   skipped: string[]
 }
 
+// Permission 规则集合
+export interface Permissions {
+  allow: string[]
+  deny: string[]
+  ask: string[]
+}
+
 // —— 类型安全的 Wails 桥 ——
 
 declare global {
@@ -299,6 +306,8 @@ declare global {
           UninstallHooks(): Promise<HooksInstallResult>
           IsHooksInstalled(): Promise<boolean>
           HookServerPort(): Promise<number>
+          GetPermissions(): Promise<Permissions>
+          TogglePermission(category: string, rule: string): Promise<Permissions>
         }
       }
     }
@@ -496,5 +505,27 @@ export async function hookServerPort(): Promise<number> {
     return await window.go.backend.App.HookServerPort()
   } catch {
     return 0
+  }
+}
+
+// —— Permission 规则 API ——
+
+const EMPTY_PERMS: Permissions = {allow: [], deny: [], ask: []}
+
+export async function getPermissions(): Promise<Permissions> {
+  if (!wailsAvailable()) return EMPTY_PERMS
+  try {
+    return toCamel<Permissions>(await window.go.backend.App.GetPermissions())
+  } catch {
+    return EMPTY_PERMS
+  }
+}
+
+export async function togglePermission(category: string, rule: string): Promise<Permissions | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<Permissions>(await window.go.backend.App.TogglePermission(category, rule))
+  } catch {
+    return null
   }
 }
