@@ -50,12 +50,23 @@ deps: install ## 同 install
 
 # —— 开发 ——
 .PHONY: dev
-dev: ## 启动 wails dev（前端 HMR + Go 自动重编译 + 内置 devtools）
+dev: ## 启动 wails dev（前端 HMR + Go 自动重编译）
 	@if [ ! -x $(WAILS) ]; then \
 		echo "❌ wails CLI not found. Run: make install"; \
 		exit 1; \
 	fi
 	$(WAILS) dev
+
+.PHONY: dev-trace
+dev-trace: ## 启动 wails dev + Go 日志级别设为 Trace（最详细）
+	$(WAILS) dev -loglevel Trace
+
+.PHONY: dev-debug
+dev-debug: ## 启动 wails dev + 详细日志
+	$(WAILS) dev -loglevel Debug
+
+# 在 dev 启动的 Aland 窗口里：右键 → Inspect Element 打开 webview devtools
+# 不需要单独 flag
 
 .PHONY: dev-debug
 dev-debug: ## wails dev + 显式开 devtools 窗口

@@ -30,8 +30,13 @@ export function CapabilityMatrix({open, onOpenChange}: MatrixProps) {
   const caps = useAland(s => s.caps)
 
   // 收集所有 feature ids（跨部落）
+  // 全方位防御：caps 里可能 entry undefined、c.features 也可能 undefined
   const allFeatureIds = Array.from(
-    new Set(Object.values(caps).flatMap(c => c.features.map(f => f.id))),
+    new Set(
+      Object.values(caps)
+        .filter((c): c is NonNullable<typeof c> => !!c)
+        .flatMap(c => (c.features ?? []).map(f => f.id)),
+    ),
   )
 
   const tribes = Object.values(meta)
@@ -117,7 +122,7 @@ export function CapabilityMatrix({open, onOpenChange}: MatrixProps) {
                         )
                       })}
                       {allFeatureIds.map(fid => {
-                        const feat = c?.features.find(f => f.id === fid)
+                        const feat = c?.features?.find(f => f.id === fid)
                         if (!feat) {
                           return (
                             <td key={fid} className="py-2 px-2 text-center">

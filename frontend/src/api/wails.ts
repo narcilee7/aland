@@ -4,6 +4,7 @@
 // 事件订阅统一搬到 ./events.ts。
 
 import type { EventsOn } from '../../wailsjs/runtime/runtime'
+import { toCamel } from '../lib/camel'
 
 // —— 与后端 tribes.Tribe / tribes.Meta 对齐 ——
 
@@ -247,13 +248,13 @@ export function wailsAvailable(): boolean {
 
 export async function getLand(): Promise<Record<string, Tribe>> {
   if (!wailsAvailable()) return {}
-  return window.go.backend.App.GetLand()
+  return toCamel<Record<string, Tribe>>(await window.go.backend.App.GetLand())
 }
 
 export async function getTribe(id: string): Promise<Tribe | null> {
   if (!wailsAvailable()) return null
   try {
-    return await window.go.backend.App.GetTribe(id)
+    return toCamel<Tribe>(await window.go.backend.App.GetTribe(id))
   } catch {
     return null
   }
@@ -276,7 +277,7 @@ export async function getForge(): Promise<Forge> {
 export async function readTribeConfigDNA(id: string): Promise<ConfigDNA | null> {
   if (!wailsAvailable()) return null
   try {
-    return await window.go.backend.App.ReadTribeConfigDNA(id)
+    return toCamel<ConfigDNA>(await window.go.backend.App.ReadTribeConfigDNA(id))
   } catch {
     return null
   }
@@ -285,7 +286,7 @@ export async function readTribeConfigDNA(id: string): Promise<ConfigDNA | null> 
 export async function listSessions(id: string): Promise<SessionShard[]> {
   if (!wailsAvailable()) return []
   try {
-    return await window.go.backend.App.ListSessions(id)
+    return toCamel<SessionShard[]>(await window.go.backend.App.ListSessions(id))
   } catch {
     return []
   }
@@ -294,7 +295,7 @@ export async function listSessions(id: string): Promise<SessionShard[]> {
 export async function getTribeCapabilities(id: string): Promise<Capabilities | null> {
   if (!wailsAvailable()) return null
   try {
-    return await window.go.backend.App.GetTribeCapabilities(id)
+    return toCamel<Capabilities>(await window.go.backend.App.GetTribeCapabilities(id))
   } catch {
     return null
   }
@@ -303,7 +304,7 @@ export async function getTribeCapabilities(id: string): Promise<Capabilities | n
 export async function getAllCapabilities(): Promise<Record<string, Capabilities>> {
   if (!wailsAvailable()) return {}
   try {
-    return await window.go.backend.App.GetAllCapabilities()
+    return toCamel<Record<string, Capabilities>>(await window.go.backend.App.GetAllCapabilities())
   } catch {
     return {}
   }
@@ -319,26 +320,39 @@ export async function writeTribeConfig(id: string, dna: ConfigDNA): Promise<bool
   }
 }
 
+// 19 项能力对应的 API 包装
+// 注意：list 类接口永远返回 []，绝不返回 null（防止下游 items.length crash）
+// 同时 camelCase 化（toCamel）以匹配我们手写的 camelCase TS 类型
+async function safeList<T>(p: Promise<T[] | null> | undefined): Promise<T[]> {
+  if (!wailsAvailable()) return []
+  try {
+    const r = await p
+    return toCamel<T[]>((r ?? []) as T[])
+  } catch {
+    return []
+  }
+}
+
 export const listMCPServers = (id: string) =>
-  wailsAvailable() ? window.go.backend.App.ListMCPServers(id) : Promise.resolve([])
+  safeList(window.go.backend.App.ListMCPServers(id))
 export const listSkills = (id: string) =>
-  wailsAvailable() ? window.go.backend.App.ListSkills(id) : Promise.resolve([])
+  safeList(window.go.backend.App.ListSkills(id))
 export const listPlans = (id: string) =>
-  wailsAvailable() ? window.go.backend.App.ListPlans(id) : Promise.resolve([])
+  safeList(window.go.backend.App.ListPlans(id))
 export const listFileHistory = (id: string) =>
-  wailsAvailable() ? window.go.backend.App.ListFileHistory(id) : Promise.resolve([])
+  safeList(window.go.backend.App.ListFileHistory(id))
 export const restoreFile = (id: string, edit: FileEdit) =>
   wailsAvailable() ? window.go.backend.App.RestoreFile(id, edit) : Promise.resolve()
 export const listDailyActivity = (id: string) =>
-  wailsAvailable() ? window.go.backend.App.ListDailyActivity(id) : Promise.resolve([])
+  safeList(window.go.backend.App.ListDailyActivity(id))
 export const listModelTokenUsage = (id: string) =>
-  wailsAvailable() ? window.go.backend.App.ListModelTokenUsage(id) : Promise.resolve([])
+  safeList(window.go.backend.App.ListModelTokenUsage(id))
 export const recentSlashCommands = (id: string, n: number) =>
-  wailsAvailable() ? window.go.backend.App.RecentSlashCommands(id, n) : Promise.resolve([])
+  safeList(window.go.backend.App.RecentSlashCommands(id, n))
 export const listPlugins = (id: string) =>
-  wailsAvailable() ? window.go.backend.App.ListPlugins(id) : Promise.resolve([])
+  safeList(window.go.backend.App.ListPlugins(id))
 export const readSession = (id: string, sessionId: string) =>
-  wailsAvailable() ? window.go.backend.App.ReadSession(id, sessionId) : Promise.resolve([])
+  safeList(window.go.backend.App.ReadSession(id, sessionId))
 export const streamLatestSession = (id: string) =>
   wailsAvailable() ? window.go.backend.App.StreamLatestSession(id) : Promise.resolve()
 export const stopLatestSession = (id: string) =>
