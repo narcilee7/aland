@@ -151,23 +151,37 @@ export function renderLand(ctx: CanvasRenderingContext2D, input: RenderInput) {
     const isRunning = t?.status === 'running' || t?.status === 'busy'
     const cpu = t?.vital.cpu ?? 0
     const pulse = isRunning ? 0.5 + 0.5 * Math.sin(time / 600) : 0
-    const radius = (isHover ? 22 : 18) * camera.zoom
+    // 部落实体放大（基础 32，hover 40），更显眼
+    const radius = (isHover ? 40 : 32) * camera.zoom
 
     drawIsoBlob(ctx, sx, sy, radius, m.themeColor, m.accentColor + '55', time, pulse, cpu)
 
-    // 部落名（地图标注风格）
-    ctx.fillStyle = isHover ? '#ffffff' : 'rgba(226, 232, 240, 0.85)'
-    ctx.font = `${isHover ? '600' : '400'} ${11 * camera.zoom}px 'JetBrains Mono', monospace`
+    // 部落名——永远显示在实体下方，不再依赖 hover
+    ctx.fillStyle = isHover ? '#ffffff' : 'rgba(226, 232, 240, 0.95)'
+    ctx.font = `${isHover ? '700' : '500'} ${14 * camera.zoom}px 'JetBrains Mono', monospace`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillText(m.name.toUpperCase(), sx, sy + radius * 0.7)
+    // 名字 + ECO 副标签
+    ctx.fillText(m.name.toUpperCase(), sx, sy + radius + 8)
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.6)'
+    ctx.font = `400 ${10 * camera.zoom}px 'JetBrains Mono', monospace`
+    ctx.fillText(m.eco, sx, sy + radius + 26)
 
-    // 状态点
+    // 状态点 + halo：右上角，跑时大并加光晕
     if (t) {
-      ctx.fillStyle =
+      const statusColor =
         t.status === 'running' ? '#22c55e' : t.status === 'busy' ? '#f59e0b' : t.status === 'error' ? '#ef4444' : '#475569'
+      const dotR = isRunning ? 5 : 3
+      if (isRunning) {
+        // 光晕
+        ctx.fillStyle = statusColor + '44'
+        ctx.beginPath()
+        ctx.arc(sx + radius * 0.85, sy - radius * 0.85, dotR * 3, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.fillStyle = statusColor
       ctx.beginPath()
-      ctx.arc(sx + radius * 0.7, sy - radius * 0.7, 3 * camera.zoom, 0, Math.PI * 2)
+      ctx.arc(sx + radius * 0.85, sy - radius * 0.85, dotR * camera.zoom, 0, Math.PI * 2)
       ctx.fill()
     }
   }
@@ -225,7 +239,7 @@ export function hitTest(
     const dx = mx - proj.sx
     const dy = my - proj.sy
     const d = Math.sqrt(dx * dx + (dy * 1.8) ** 2) // Y 方向压扁匹配椭圆
-    if (d < 24 * camera.zoom && (!best || d < best.dist)) {
+    if (d < 40 * camera.zoom && (!best || d < best.dist)) {
       best = {id: p.id, dist: d}
     }
   }

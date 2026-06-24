@@ -2,6 +2,7 @@
 // 改一处记着改另一处（强约束：常量值必须完全一致）。
 
 import type {SessionEvent, Tribe} from './wails'
+import {toCamel} from '../lib/camel'
 
 // 事件名常量。
 export const EventName = {
@@ -51,18 +52,19 @@ function on<T>(name: string, cb: (payload: T) => void): () => void {
 }
 
 export const onTribeVital = (cb: (snap: TribeSnapshotMap) => void) =>
-  on<TribeSnapshotMap>(EventName.TribeVital, cb)
+  on<TribeSnapshotMap>(EventName.TribeVital, snap => cb(toCamel<TribeSnapshotMap>(snap)))
 
 export const onTribeBorn = (cb: (e: TribeLifecycleEvent) => void) =>
-  on<TribeLifecycleEvent>(EventName.TribeBorn, cb)
+  on<TribeLifecycleEvent>(EventName.TribeBorn, e => cb(toCamel<TribeLifecycleEvent>(e)))
 
 export const onTribeDeath = (cb: (e: TribeLifecycleEvent) => void) =>
-  on<TribeLifecycleEvent>(EventName.TribeDeath, cb)
+  on<TribeLifecycleEvent>(EventName.TribeDeath, e => cb(toCamel<TribeLifecycleEvent>(e)))
 
-export const onFSChange = (cb: (e: FSChangeEvent) => void) => on<FSChangeEvent>(EventName.FSChange, cb)
+export const onFSChange = (cb: (e: FSChangeEvent) => void) =>
+  on<FSChangeEvent>(EventName.FSChange, e => cb(toCamel<FSChangeEvent>(e)))
 
 export const onSpotlightToggle = (cb: (e: SpotlightToggleEvent) => void) =>
-  on<SpotlightToggleEvent>(EventName.SpotlightToggle, cb)
+  on<SpotlightToggleEvent>(EventName.SpotlightToggle, e => cb(toCamel<SpotlightToggleEvent>(e)))
 
 export const onSessionEvent = (cb: (e: SessionEvent) => void) =>
-  on<SessionEvent>(EventName.SessionEvent, cb)
+  on<SessionEvent>(EventName.SessionEvent, e => cb(toCamel<SessionEvent>(e)))
