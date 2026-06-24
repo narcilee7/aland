@@ -1,0 +1,200 @@
+// 等距投影 Canvas 2D 引擎（M0 版本）。
+//
+// 设计取舍：不用 Three.js / WebGL。Canvas 2D + 精灵图足够描绘四个部落。
+// 性能策略：背景预渲染，部落精灵每帧绘制，hover/click 命中检测在画布坐标。
+//
+// 坐标系：
+//   - 世界坐标 (worldX, worldY)：等距网格中的"逻辑"位置
+//   - 屏幕坐标 (screenX, screenY)：最终绘制到 canvas 上的像素
+//
+// 投影公式（30° 等距）：
+//   screenX = (worldX - worldY) * TILE_W / 2
+//   screenY = (worldX + worldY) * TILE_H / 2 - worldZ
+
+import type {Tribe, TribeMeta} from '../api/wails'
+
+export interface TribePlacement {
+  id: string
+  /** 世界坐标 X（逻辑单位） */
+  x: number
+  /** 世界坐标 Y */
+  y: number
+  /** 海拔，影响绘制高度 */
+  z: number
+}
+
+export interface Camera {
+  x: number
+  y: number
+  zoom: number
+}
+
+export const TILE_W = 64
+export const TILE_H = 32
+
+/** 把世界坐标投影到屏幕坐标（中心点） */
+export function project(x: number, y: number, z = 0, camera: Camera = {x: 0, y: 0, zoom: 1}): {sx: number; sy: number} {
+  const sx = ((x - y) * TILE_W) / 2
+  const sy = ((x + y) * TILE_H) / 2 - z
+  return {sx: sx * camera.zoom + camera.x, sy: sy * camera.zoom + camera.y}
+}
+
+/** 屏幕坐标反投影到世界坐标（用于命中检测） */
+export function unproject(sx: number, sy: number, camera: Camera = {x: 0, y: 0, zoom: 1}): {x: number; y: number} {
+  const ax = (sx - camera.x) / camera.zoom
+  const ay = (sy - camera.y) / camera.zoom
+  const x = (ax / (TILE_W / 2) + ay / (TILE_H / 2)) / 2
+  const y = (ay / (TILE_H / 2) - ax / (TILE_W / 2)) / 2
+  return {x, y}
+}
+
+/** 把 hex 顶点画到 canvas */
+function drawIsoBlob(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  fill: string,
+  glow: string,
+  time: number,
+  pulse: number,
+) {
+  // 光晕
+  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2.4)
+  grd.addColorStop(0, glow)
+  grd.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = grd
+  ctx.beginPath()
+  ctx.arc(cx, cy, radius * 2.4, 0, Math.PI * 2)
+  ctx.fill()
+
+  // 主体：等距椭圆，随呼吸缩放
+  const breath = 1 + 0.04 * Math.sin(time / 800)
+  const r = radius * breath
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.scale(1, 0.55) // 等距压扁
+  ctx.fillStyle = fill
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.fill()
+
+  // 中心核——运行中时更亮
+  if (pulse > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${0.2 + 0.3 * pulse})`
+    ctx.beginPath()
+    ctx.arc(0, -r * 0.15, r * 0.35, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+export interface RenderInput {
+  placements: TribePlacement[]
+  tribes: Record<string, Tribe>
+  meta: Record<string, TribeMeta>
+  camera: Camera
+  hoverId: string | null
+  width: number
+  height: number
+  time: number // ms
+}
+
+export function renderLand(ctx: CanvasRenderingContext2D, input: RenderInput) {
+  const {placements, tribes, meta, camera, hoverId, width, height, time} = input
+
+  // —— 1. 背景：极深的靛蓝 → 墨绿径向渐变 ——
+  const bg = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height))
+  bg.addColorStop(0, '#0d1f15')
+  bg.addColorStop(1, '#0a0e1a')
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, width, height)
+
+  // —— 2. 大陆地形（同心等距环）——
+  const cx = width / 2
+  const cy = height / 2
+  for (let r = 1; r <= 5; r++) {
+    ctx.strokeStyle = `rgba(100, 116, 139, ${0.05 + 0.01 * (5 - r)})`
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    // 用四个等距点连成一个菱形
+    const angles: [number, number][] = [[1, 0], [0, 1], [-1, 0], [0, -1]]
+    const radius = r * 4
+    angles.forEach((a, i) => {
+      const p = project(a[0] * radius, a[1] * radius, 0, {x: cx, y: cy, zoom: camera.zoom})
+      if (i === 0) ctx.moveTo(p.sx, p.sy)
+      else ctx.lineTo(p.sx, p.sy)
+    })
+    ctx.closePath()
+    ctx.stroke()
+  }
+
+  // —— 3. 部落精灵（按 y+x 排序：远的先画，近的后画）——
+  const sorted = [...placements].sort((a, b) => a.x + a.y - (b.x + b.y))
+
+  for (const place of sorted) {
+    const t = tribes[place.id]
+    const m = meta[place.id]
+    if (!m) continue
+
+    const {sx, sy} = project(place.x, place.y, place.z, {x: cx, y: cy, zoom: camera.zoom})
+    const isHover = place.id === hoverId
+    const isRunning = t?.status === 'running' || t?.status === 'busy'
+    const pulse = isRunning ? 0.5 + 0.5 * Math.sin(time / 600) : 0
+    const radius = (isHover ? 22 : 18) * camera.zoom
+
+    drawIsoBlob(ctx, sx, sy, radius, m.themeColor, m.accentColor + '55', time, pulse)
+
+    // 部落名（地图标注风格）
+    ctx.fillStyle = isHover ? '#ffffff' : 'rgba(226, 232, 240, 0.85)'
+    ctx.font = `${isHover ? '600' : '400'} ${11 * camera.zoom}px 'JetBrains Mono', monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(m.name.toUpperCase(), sx, sy + radius * 0.7)
+
+    // 状态点
+    if (t) {
+      ctx.fillStyle =
+        t.status === 'running' ? '#22c55e' : t.status === 'busy' ? '#f59e0b' : t.status === 'error' ? '#ef4444' : '#475569'
+      ctx.beginPath()
+      ctx.arc(sx + radius * 0.7, sy - radius * 0.7, 3 * camera.zoom, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  // —— 4. 中央圣所（占位：M0 留白）——
+  const center = project(0, 0, 0, {x: cx, y: cy, zoom: camera.zoom})
+  ctx.strokeStyle = 'rgba(212, 168, 83, 0.25)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.arc(center.sx, center.sy, 30 * camera.zoom, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.fillStyle = 'rgba(212, 168, 83, 0.08)'
+  ctx.fill()
+}
+
+/** 根据鼠标位置判断 hover 到哪个部落（轴对齐包围盒近似） */
+export function hitTest(
+  mx: number,
+  my: number,
+  placements: TribePlacement[],
+  meta: Record<string, TribeMeta>,
+  camera: Camera,
+  width: number,
+  height: number,
+): string | null {
+  const cx = width / 2
+  const cy = height / 2
+  let best: {id: string; dist: number} | null = null
+  for (const p of placements) {
+    if (!meta[p.id]) continue
+    const proj = project(p.x, p.y, p.z, {x: cx, y: cy, zoom: camera.zoom})
+    const dx = mx - proj.sx
+    const dy = my - proj.sy
+    const d = Math.sqrt(dx * dx + (dy * 1.8) ** 2) // Y 方向压扁匹配椭圆
+    if (d < 24 * camera.zoom && (!best || d < best.dist)) {
+      best = {id: p.id, dist: d}
+    }
+  }
+  return best?.id ?? null
+}
