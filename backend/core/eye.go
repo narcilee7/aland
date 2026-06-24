@@ -43,6 +43,8 @@ const (
 	FlashCostAlert FlashType = "cost_alert" // 预算超阈值
 	FlashError     FlashType = "error"      // CLI 报错
 	FlashConflict  FlashType = "conflict"   // 多 CLI 改同一文件
+	FlashBorn      FlashType = "born"       // tribe 进程启动
+	FlashDeath     FlashType = "death"      // tribe 进程停止
 )
 
 // Flash 单条灵动岛通知。

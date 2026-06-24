@@ -96,8 +96,32 @@ func (a *App) vitalLoop(ctx context.Context) {
 			snap := a.land.Snapshot()
 			a.em.EmitTribeVital(snap)
 			a.detectBornDeath(snap)
+			a.refreshEye(snap)
 		}
 	}
+}
+
+// refreshEye 把部落 vital 投影成 TribeVitalInput 喂给 Eye 状态机。
+// 模式或 Running 变化时 EmitEyeUpdate，前端订阅即拿到最新。
+func (a *App) refreshEye(snap map[string]tribes.Tribe) {
+	inputs := make([]core.TribeVitalInput, 0, len(snap))
+	for _, t := range snap {
+		inputs = append(inputs, core.TribeVitalInput{
+			ID:     t.Meta.ID,
+			Status: string(t.Status),
+			PID:    t.Vital.PID,
+			CPU:    t.Vital.CPU,
+		})
+	}
+	if !a.eye.Recompute(inputs) {
+		return
+	}
+	snap2 := a.eye.Snapshot()
+	a.em.EmitEyeUpdate(events.EyeUpdateEvent{
+		Mode:      snap2.Mode,
+		Running:   snap2.Running,
+		UpdatedAt: snap2.UpdatedAt,
+	})
 }
 
 func (a *App) detectBornDeath(snap map[string]tribes.Tribe) {
@@ -108,9 +132,13 @@ func (a *App) detectBornDeath(snap map[string]tribes.Tribe) {
 		cur := t.Vital.PID
 		if !ok && cur > 0 {
 			a.em.EmitTribeBorn(id, cur, t.Meta.Name)
+			flash := a.eye.PushFlash(core.FlashBorn, id, fmt.Sprintf("%s 启动 · pid %d", t.Meta.Name, cur))
+			a.em.EmitEyeFlash(flash)
 		}
 		if ok && prev > 0 && cur == 0 {
 			a.em.EmitTribeDeath(id, prev, t.Meta.Name)
+			flash := a.eye.PushFlash(core.FlashDeath, id, fmt.Sprintf("%s 已停止", t.Meta.Name))
+			a.em.EmitEyeFlash(flash)
 		}
 		a.prev[id] = cur
 	}
@@ -362,4 +390,24 @@ func (a *App) WriteTribeConfig(id string, dna tribes.ConfigDNA) error {
 	}
 	core.Log.Info("write tribe config", "tribe", id, "surface", len(dna.Surface), "middle", len(dna.Middle), "deep", len(dna.Deep))
 	return w.WriteConfig(dna)
+}
+
+// ===== Eye 灵动岛 =====
+
+// GetEyeState 返回当前 Eye 完整快照。
+// 前端在挂载时调用一次拿到初始 Mode/Running/Flashing，
+// 之后通过订阅 eye:update / eye:flash 增量更新。
+func (a *App) GetEyeState() core.EyeState {
+	return a.eye.Snapshot()
+}
+
+// ConsumeEyeFlash 把指定 flash 标记为已读（从队列移除）。
+// 前端在用户点击/关闭一条通知时调用。
+func (a *App) ConsumeEyeFlash(id string) bool {
+	return a.eye.ConsumeFlash(id)
+}
+
+// ClearEyeFlashes 清空全部 flash（前端"全部已读"按钮）。
+func (a *App) ClearEyeFlashes() {
+	a.eye.ClearFlashes()
 }
