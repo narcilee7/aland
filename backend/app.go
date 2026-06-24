@@ -12,6 +12,7 @@ import (
 	"github.com/narcilee7/aland/backend/core"
 	"github.com/narcilee7/aland/backend/events"
 	"github.com/narcilee7/aland/backend/eye"
+	"github.com/narcilee7/aland/backend/hooks"
 	"github.com/narcilee7/aland/backend/hotkey"
 	"github.com/narcilee7/aland/backend/infra"
 	"github.com/narcilee7/aland/backend/tribes"
@@ -29,6 +30,9 @@ type App struct {
 
 	// tray 灵动岛菜单栏图标。可能在 macOS 不可用时为 nil。
 	tray *eye.Tray
+
+	// hooks Claude Code hooks HTTP server。可能未启动（settings.json 写失败时）。
+	hookSrv *hooks.Server
 
 	proc *infra.ProcManager
 	fs   *infra.FSWatch
@@ -85,8 +89,40 @@ func (a *App) Startup(ctx context.Context) {
 		core.Log.Warn("hotkey register failed", "err", err)
 	}
 
+	// 启动 Claude Hooks server + 自动注册到 settings.json
+	a.startHooks(ctx)
+
 	// 周期把生命体征推给前端 + 检测 born/death
 	go a.vitalLoop(ctx)
+}
+
+// startHooks 启动 hooks server 并自动注册到 Claude Code settings.json。
+// 注册失败（如权限、文件锁）不影响 Aland 主流程——只 log warn。
+func (a *App) startHooks(ctx context.Context) {
+	// 1. 注册（幂等）
+	if _, err := hooks.Install(); err != nil {
+		core.Log.Warn("hooks install failed", "err", err)
+		// 注册失败仍然启动 server——方便手动调
+	}
+
+	// 2. 启 server
+	a.hookSrv = hooks.New(func(p hooks.HookPayload) {
+		// 转发到前端 + 触发灵动岛 flash
+		a.em.EmitHook(p)
+		// SessionStop/Stop/PreCompact 这类事件触发 Eye flash
+		switch p.HookEventName {
+		case hooks.EventStop, hooks.EventSubagentStop:
+			f := a.eye.PushFlash(core.FlashComplete, "claude", "claude session stopped")
+			a.em.EmitEyeFlash(f)
+		case hooks.EventNotification:
+			f := a.eye.PushFlash(core.FlashError, "claude", "claude notification: "+p.NotificationMsg)
+			a.em.EmitEyeFlash(f)
+		}
+	})
+	if err := a.hookSrv.Start(ctx); err != nil {
+		core.Log.Warn("hooks server start failed", "err", err)
+		a.hookSrv = nil
+	}
 }
 
 func (a *App) collectConfigPaths() []string {
@@ -437,4 +473,38 @@ func (a *App) ConsumeEyeFlash(id string) bool {
 // ClearEyeFlashes 清空全部 flash（前端"全部已读"按钮）。
 func (a *App) ClearEyeFlashes() {
 	a.eye.ClearFlashes()
+}
+
+// ===== Claude Hooks =====
+
+// InstallHooks 把 Aland 注册到 ~/.claude/settings.json 的 hooks 字段。
+// 幂等。已经注册过的事件不会重复添加。
+func (a *App) InstallHooks() (*hooks.InstallResult, error) {
+	return hooks.Install()
+}
+
+// UninstallHooks 从 settings.json 移除 Aland 注册的 hook 条目。
+// 保留用户自定义的其他 hooks。
+func (a *App) UninstallHooks() (*hooks.InstallResult, error) {
+	res, err := hooks.Uninstall()
+	// 顺便关停 server
+	if a.hookSrv != nil {
+		_ = a.hookSrv.Stop()
+		a.hookSrv = nil
+	}
+	return res, err
+}
+
+// IsHooksInstalled 检查 settings.json 是否已经有 Aland 注册（不修改文件）。
+func (a *App) IsHooksInstalled() (bool, error) {
+	return hooks.IsInstalled()
+}
+
+// HookServerPort 返回当前 hook server 监听的端口。
+// 前端调试时显示。
+func (a *App) HookServerPort() int {
+	if a.hookSrv == nil {
+		return 0
+	}
+	return a.hookSrv.Port()
 }

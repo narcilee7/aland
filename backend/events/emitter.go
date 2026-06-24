@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/narcilee7/aland/backend/core"
+	"github.com/narcilee7/aland/backend/hooks"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -70,4 +71,9 @@ func (e *Emitter) EmitEyeUpdate(ev EyeUpdateEvent) {
 // Flash 是值类型不含锁，安全 by value。
 func (e *Emitter) EmitEyeFlash(flash core.Flash) {
 	e.Emit(EyeFlash, EyeFlashEvent{Flash: flash})
+}
+
+// EmitHook claude:hook 的快捷方法。直接把 hook payload 转发给前端。
+func (e *Emitter) EmitHook(p hooks.HookPayload) {
+	e.Emit(HookEvent, p)
 }

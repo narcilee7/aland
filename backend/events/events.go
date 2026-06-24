@@ -11,6 +11,7 @@ package events
 
 import (
 	"github.com/narcilee7/aland/backend/core"
+	"github.com/narcilee7/aland/backend/hooks"
 	"github.com/narcilee7/aland/backend/tribes"
 )
 
@@ -32,6 +33,8 @@ const (
 	EyeUpdate = "eye:update"
 	// EyeFlash 灵动岛瞬时通知（complete / cost_alert / error / conflict）。
 	EyeFlash = "eye:flash"
+	// HookEvent Claude Code hook 事件转发（PreToolUse / PostToolUse / Stop / 等）。
+	HookEvent = "claude:hook"
 )
 
 // TribeLifecycleEvent tribe:born / tribe:death 的 payload。
@@ -69,3 +72,7 @@ type EyeUpdateEvent struct {
 type EyeFlashEvent struct {
 	Flash core.Flash `json:"flash"`
 }
+
+// HookEventPayload claude:hook 的 payload。直接转发 hooks.HookPayload 的 JSON。
+// 前端拿到的就是 Claude Code 原生 hook JSON 字段。
+type HookEventPayload = hooks.HookPayload
