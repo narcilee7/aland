@@ -13,10 +13,22 @@ import (
 )
 
 // ClaudeAdapter 适配 Claude Code CLI。
-// 进程检测用 `ps`，配置读取 `~/.claude/settings.json`。
-type ClaudeAdapter struct{}
+// 它是一个具体的实现，结构性满足 Identity/Detector/Launcher/Reader——
+// 不需要显式声明接口实现。
+type ClaudeAdapter struct {
+	home string
+}
 
-func NewClaudeAdapter() *ClaudeAdapter { return &ClaudeAdapter{} }
+// NewClaudeAdapter 构造一个 Claude 适配器。
+// home 是用户主目录；如果为空，自动取 $HOME。
+func NewClaudeAdapter(home string) *ClaudeAdapter {
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	return &ClaudeAdapter{home: home}
+}
+
+// —— Identity ——
 
 func (c *ClaudeAdapter) ID() string      { return "claude" }
 func (c *ClaudeAdapter) Name() string    { return "Claude Code" }
@@ -26,17 +38,18 @@ func (c *ClaudeAdapter) EcoType() string { return "classical" }
 func (c *ClaudeAdapter) ThemeColor() string  { return "#d4a853" }
 func (c *ClaudeAdapter) AccentColor() string { return "#ffdf80" }
 
+// —— Reader ——
+
 // ConfigPaths 返回 Claude Code 配置目录下的关键文件。
 func (c *ClaudeAdapter) ConfigPaths() []string {
-	home, _ := os.UserHomeDir()
 	return []string{
-		filepath.Join(home, ".claude", "settings.json"),
-		filepath.Join(home, ".claude"),
+		filepath.Join(c.home, ".claude", "settings.json"),
+		filepath.Join(c.home, ".claude"),
 	}
 }
 
 // ParseConfig 解析 settings.json。
-// 失败时返回空 map（CLI 未安装也属于正常情况）。
+// 失败时返回空 map（CLI 未安装也属于正常情况，不算错误）。
 func (c *ClaudeAdapter) ParseConfig() (map[string]interface{}, error) {
 	paths := c.ConfigPaths()
 	if len(paths) == 0 {
@@ -44,17 +57,23 @@ func (c *ClaudeAdapter) ParseConfig() (map[string]interface{}, error) {
 	}
 	data, err := os.ReadFile(paths[0])
 	if err != nil {
-		return map[string]interface{}{}, nil
+		if os.IsNotExist(err) {
+			return map[string]interface{}{}, nil
+		}
+		return nil, err
 	}
-	var out map[string]interface{}
+	out := map[string]interface{}{}
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
+// —— Detector ——
+
 // DetectProcess 扫描系统中正在运行的 claude 进程。
 // macOS / Linux 用 ps；Windows 走 WMI（v1 再加）。
+// 找不到返回 (nil, nil)，不算错误。
 func (c *ClaudeAdapter) DetectProcess() (*ProcessInfo, error) {
 	cmd := exec.Command("ps", "-axo", "pid=,comm=,args=")
 	out, err := cmd.Output()
@@ -62,7 +81,7 @@ func (c *ClaudeAdapter) DetectProcess() (*ProcessInfo, error) {
 		return nil, err
 	}
 	for _, line := range bytes.Split(out, []byte("\n")) {
-		s := string(line)
+		s := strings.TrimSpace(string(line))
 		if !strings.Contains(strings.ToLower(s), "claude") {
 			continue
 		}
@@ -74,8 +93,8 @@ func (c *ClaudeAdapter) DetectProcess() (*ProcessInfo, error) {
 		if len(fields) < 2 {
 			continue
 		}
-		pid, _ := strconv.Atoi(fields[0])
-		if pid == 0 {
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil || pid == 0 {
 			continue
 		}
 		return &ProcessInfo{
@@ -87,26 +106,16 @@ func (c *ClaudeAdapter) DetectProcess() (*ProcessInfo, error) {
 	return nil, nil
 }
 
+// —— Launcher ——
+
 // Launch 启动 Claude Code。
-// 优先使用 `claude` 命令，找不到再 fallback 到常见路径。
+// 优先用 `claude` 命令，找不到再 fallback 到常见路径。
 func (c *ClaudeAdapter) Launch(cwd string, args []string) error {
 	bin, err := exec.LookPath("claude")
 	if err != nil {
-		// 常见 fallback
-		home, _ := os.UserHomeDir()
-		candidates := []string{
-			filepath.Join(home, ".local", "bin", "claude"),
-			"/usr/local/bin/claude",
-			"/opt/homebrew/bin/claude",
-		}
-		for _, c := range candidates {
-			if _, statErr := os.Stat(c); statErr == nil {
-				bin = c
-				break
-			}
-		}
+		bin = c.findBinary()
 		if bin == "" {
-			return fmt.Errorf("claude CLI not found in PATH")
+			return fmt.Errorf("claude CLI not found in PATH or common locations")
 		}
 	}
 	cmd := exec.Command(bin, args...)
@@ -124,4 +133,19 @@ func (c *ClaudeAdapter) Kill(pid int) error {
 		return err
 	}
 	return proc.Signal(syscall.SIGTERM)
+}
+
+// findBinary 在常见路径中查找 claude 可执行文件。
+func (c *ClaudeAdapter) findBinary() string {
+	candidates := []string{
+		filepath.Join(c.home, ".local", "bin", "claude"),
+		"/usr/local/bin/claude",
+		"/opt/homebrew/bin/claude",
+	}
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
 }

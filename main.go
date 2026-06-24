@@ -15,9 +15,13 @@ import (
 var assets embed.FS
 
 func main() {
-	app := backend.NewApp()
+	app, err := backend.NewApp()
+	if err != nil {
+		println("Error:", err.Error())
+		return
+	}
 
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:  "Aland",
 		Width:  1280,
 		Height: 820,
