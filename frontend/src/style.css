@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Aland 全局样式。
+ * 深夜大陆基调：极深的靛蓝 → 墨绿渐变。
+ * 所有颜色用 CSS 变量，方便部落主题色动态注入。
+ */
+
+:root {
+  --aland-bg-1: theme('colors.land.1');
+  --aland-bg-2: theme('colors.land.2');
+
+  /* 默认部落主色（运行中会被覆盖） */
+  --tribe-theme: #d4a853;
+  --tribe-accent: #ffdf80;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* 透明标题栏下需要一片可拖动区域 */
+body {
+  -webkit-app-region: no-drag;
+}
+.draggable {
+  -webkit-app-region: drag;
+}
+.interactive {
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
+/* Aland 工具类：发光的部落色文本 */
+.text-tribe {
+  color: var(--tribe-theme);
+}
+.border-tribe {
+  border-color: var(--tribe-theme);
+}
+.bg-tribe {
+  background-color: var(--tribe-theme);
+}
+
+/* 等距投影背景——深夜大陆基调 */
+.bg-land {
+  background: radial-gradient(ellipse at center, #0d1f15 0%, #0a0e1a 70%);
+}

@@ -1,0 +1,19 @@
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/wailsjs/
+
+# Go
+*.test
+*.out
+build/bin/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 环境
+.env
+.env.local
