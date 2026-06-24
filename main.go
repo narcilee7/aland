@@ -3,10 +3,11 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
 
 	"github.com/narcilee7/aland/backend"
 	"github.com/narcilee7/aland/backend/eye"
-	"github.com/narcilee7/aland/backend/tribes"
+	"github.com/narcilee7/aland/cmd/hook"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -19,6 +20,13 @@ import (
 var assets embed.FS
 
 func main() {
+	// CLI 子命令分发。hook 子命令必须在加载 Wails 前返回——Claude Code
+	// 会在每次事件时 spawn 这个二进制，不能拖慢主流程。
+	if len(os.Args) >= 2 && os.Args[1] == "hook" {
+		runHook(os.Args[2:])
+		return
+	}
+
 	app, err := backend.NewApp()
 	if err != nil {
 		log.Fatalf("new app: %v", err)
@@ -80,5 +88,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("wails run: %v", err)
 	}
-	_ = tribes.StatusIdle // 保留 import 用于未来扩展
+}
+
+// runHook 转发到 cmd/hook 包。
+func runHook(args []string) {
+	os.Exit(hook.Run(args))
 }
