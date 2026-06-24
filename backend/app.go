@@ -11,6 +11,7 @@ import (
 
 	"github.com/narcilee7/aland/backend/core"
 	"github.com/narcilee7/aland/backend/events"
+	"github.com/narcilee7/aland/backend/eye"
 	"github.com/narcilee7/aland/backend/hotkey"
 	"github.com/narcilee7/aland/backend/infra"
 	"github.com/narcilee7/aland/backend/tribes"
@@ -25,6 +26,9 @@ type App struct {
 	land  *tribes.Land
 	forge *core.Forge
 	eye   *core.EyeState
+
+	// tray 灵动岛菜单栏图标。可能在 macOS 不可用时为 nil。
+	tray *eye.Tray
 
 	proc *infra.ProcManager
 	fs   *infra.FSWatch
@@ -45,6 +49,19 @@ func NewApp() (*App, error) {
 		eye:   core.NewEyeState(),
 		prev:  make(map[string]int),
 	}, nil
+}
+
+// SetTray 注入灵动岛菜单栏实例。可选——未注入时所有 tray 调用是 no-op。
+// 必须在 Startup 之前调用。
+func (a *App) SetTray(t *eye.Tray) {
+	a.tray = t
+}
+
+// GetWailsContext 返回 Wails 启动时设置的 context。
+// 用于 systray 菜单回调里调用 runtime.Show/Quit。
+// 返回 nil 表示 Wails 还没启动。
+func (a *App) GetWailsContext() context.Context {
+	return a.ctx
 }
 
 // Startup Wails 启动回调。
@@ -102,7 +119,7 @@ func (a *App) vitalLoop(ctx context.Context) {
 }
 
 // refreshEye 把部落 vital 投影成 TribeVitalInput 喂给 Eye 状态机。
-// 模式或 Running 变化时 EmitEyeUpdate，前端订阅即拿到最新。
+// 模式或 Running 变化时 EmitEyeUpdate，前端订阅即拿到最新；同时更新菜单栏图标。
 func (a *App) refreshEye(snap map[string]tribes.Tribe) {
 	inputs := make([]core.TribeVitalInput, 0, len(snap))
 	for _, t := range snap {
@@ -122,6 +139,10 @@ func (a *App) refreshEye(snap map[string]tribes.Tribe) {
 		Running:   snap2.Running,
 		UpdatedAt: snap2.UpdatedAt,
 	})
+	// 同步更新菜单栏图标
+	if a.tray != nil {
+		a.tray.SetMode(snap2.Mode)
+	}
 }
 
 func (a *App) detectBornDeath(snap map[string]tribes.Tribe) {
@@ -134,11 +155,17 @@ func (a *App) detectBornDeath(snap map[string]tribes.Tribe) {
 			a.em.EmitTribeBorn(id, cur, t.Meta.Name)
 			flash := a.eye.PushFlash(core.FlashBorn, id, fmt.Sprintf("%s 启动 · pid %d", t.Meta.Name, cur))
 			a.em.EmitEyeFlash(flash)
+			if a.tray != nil {
+				a.tray.ShowFlash(core.FlashBorn, 800)
+			}
 		}
 		if ok && prev > 0 && cur == 0 {
 			a.em.EmitTribeDeath(id, prev, t.Meta.Name)
 			flash := a.eye.PushFlash(core.FlashDeath, id, fmt.Sprintf("%s 已停止", t.Meta.Name))
 			a.em.EmitEyeFlash(flash)
+			if a.tray != nil {
+				a.tray.ShowFlash(core.FlashDeath, 800)
+			}
 		}
 		a.prev[id] = cur
 	}
