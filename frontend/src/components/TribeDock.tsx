@@ -1,9 +1,11 @@
 // TribeDock 右侧面板——所有部落的快速入口。
 // 核心改动：让用户一眼看到 Claude 在哪、能不能进。
+// 可折叠：默认展开，看地图更沉浸时收起。
 
+import {useState} from 'react'
 import {useAland} from '../stores/alandStore'
 import {Badge} from './ui'
-import {ArrowRight, MapPin} from 'lucide-react'
+import {ArrowRight, ChevronRight, MapPin} from 'lucide-react'
 import type {Tribe} from '../api/wails'
 
 interface TribeDockProps {
@@ -13,6 +15,7 @@ interface TribeDockProps {
 }
 
 export function TribeDock({onOpenForge, onOpenMatrix, onOpenSpotlight}: TribeDockProps) {
+  const [collapsed, setCollapsed] = useState(false)
   const tribes = useAland(s => s.tribes)
   const meta = useAland(s => s.meta)
   const enterTribe = useAland(s => s.enterTribe)
@@ -33,37 +36,47 @@ export function TribeDock({onOpenForge, onOpenMatrix, onOpenSpotlight}: TribeDoc
 
   return (
     <div className="absolute right-4 top-16 bottom-8 w-72 flex flex-col gap-2 z-20 pointer-events-none">
-      {/* 工具栏 */}
-      <div className="rounded-lg border border-white/5 bg-land-2/70 backdrop-blur p-2 flex gap-1 pointer-events-auto">
-        {onOpenSpotlight && (
-          <button
-            onClick={onOpenSpotlight}
-            className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
-            title="Cmd+Shift+A"
-          >
-            ⌘⇧A
-          </button>
-        )}
-        {onOpenForge && (
-          <button
-            onClick={onOpenForge}
-            className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
-          >
-            Forge
-          </button>
-        )}
-        {onOpenMatrix && (
-          <button
-            onClick={onOpenMatrix}
-            className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
-          >
-            Matrix
-          </button>
-        )}
+      {/* 工具栏（折叠时也保留在折叠条里） */}
+      <div className="flex items-center gap-1 pointer-events-auto">
+        <div className="rounded-lg border border-white/5 bg-land-2/70 backdrop-blur p-2 flex gap-1 flex-1">
+          {onOpenSpotlight && (
+            <button
+              onClick={onOpenSpotlight}
+              className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
+              title="Cmd+Shift+A"
+            >
+              ⌘⇧A
+            </button>
+          )}
+          {onOpenForge && (
+            <button
+              onClick={onOpenForge}
+              className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
+            >
+              Forge
+            </button>
+          )}
+          {onOpenMatrix && (
+            <button
+              onClick={onOpenMatrix}
+              className="flex-1 px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
+            >
+              Matrix
+            </button>
+          )}
+        </div>
+        {/* 折叠按钮 */}
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          className="rounded-lg border border-white/5 bg-land-2/70 backdrop-blur p-2.5 text-ink-dim hover:text-ink hover:bg-white/5 transition-colors"
+          title={collapsed ? 'Expand' : 'Collapse'}
+        >
+          <ChevronRight className={`h-3 w-3 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+        </button>
       </div>
 
       {/* Now Active 提示 */}
-      {runningCount > 0 && (
+      {!collapsed && runningCount > 0 && (
         <div className="rounded-lg border border-forge-green/30 bg-forge-green/5 backdrop-blur px-3 py-2 pointer-events-auto">
           <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-forge-green">
             <span className="h-1.5 w-1.5 rounded-full bg-forge-green animate-pulse" />
@@ -73,6 +86,7 @@ export function TribeDock({onOpenForge, onOpenMatrix, onOpenSpotlight}: TribeDoc
       )}
 
       {/* 部落列表 */}
+      {!collapsed && (
       <div className="flex-1 rounded-lg border border-white/5 bg-land-2/40 backdrop-blur p-2 space-y-1.5 overflow-y-auto pointer-events-auto">
         {list.length === 0 ? (
           <div className="text-ink-faint text-xs font-mono py-4 text-center">
@@ -84,12 +98,15 @@ export function TribeDock({onOpenForge, onOpenMatrix, onOpenSpotlight}: TribeDoc
           ))
         )}
       </div>
+      )}
 
       {/* 底部提示 */}
-      <div className="text-[9px] font-mono uppercase tracking-wider text-ink-faint/50 text-center pointer-events-auto">
-        <MapPin className="inline h-2.5 w-2.5 mr-1" />
-        click map or card
-      </div>
+      {!collapsed && (
+        <div className="text-[9px] font-mono uppercase tracking-wider text-ink-faint/50 text-center pointer-events-auto">
+          <MapPin className="inline h-2.5 w-2.5 mr-1" />
+          click map or card
+        </div>
+      )}
     </div>
   )
 }

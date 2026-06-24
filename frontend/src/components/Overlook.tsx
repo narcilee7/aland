@@ -14,17 +14,30 @@ interface OverlookProps {
 }
 
 export function Overlook({onOpenForge, onOpenMatrix, onOpenSpotlight}: OverlookProps = {}) {
-  const tribes = useAland(s => s.tribes)
-  const meta = useAland(s => s.meta)
+  // 只订阅函数（稳定的引用），数据走 ref——这样 tribe:vital 不会触发 useEffect 重跑
+  // 避免 canvas 每秒被 reset 闪烁
   const enterTribe = useAland(s => s.enterTribe)
   const toggleSpotlight = useAland(s => s.toggleSpotlight)
 
+  // 数据 ref：tribe:vital 触发时 ref 刷新，render loop 读 ref 拿最新值
+  const tribesRef = useRef(useAland.getState().tribes)
+  const metaRef = useRef(useAland.getState().meta)
+  useEffect(() => {
+    const unsub = useAland.subscribe(state => {
+      tribesRef.current = state.tribes
+      metaRef.current = state.meta
+    })
+    return unsub
+  }, [])
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [hover, setHover] = useState<string | null>(null)
-  const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 })
-  const sizeRef = useRef({ w: 0, h: 0 })
+  const hoverRef = useRef<string | null>(null)
+  hoverRef.current = hover
+  const cameraRef = useRef<Camera>({x: 0, y: 0, zoom: 1})
+  const sizeRef = useRef({w: 0, h: 0})
 
-  // 渲染循环
+  // 渲染循环——只在 mount 时跑一次
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -36,7 +49,7 @@ export function Overlook({onOpenForge, onOpenMatrix, onOpenSpotlight}: OverlookP
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
-      sizeRef.current = { w: rect.width, h: rect.height }
+      sizeRef.current = {w: rect.width, h: rect.height}
       canvas.width = rect.width * dpr
       canvas.height = rect.height * dpr
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -46,13 +59,13 @@ export function Overlook({onOpenForge, onOpenMatrix, onOpenSpotlight}: OverlookP
     ro.observe(canvas)
 
     const tick = (t: number) => {
-      const { w, h } = sizeRef.current
+      const {w, h} = sizeRef.current
       renderLand(ctx, {
         placements: DEFAULT_PLACEMENTS,
-        tribes,
-        meta,
+        tribes: tribesRef.current,
+        meta: metaRef.current,
         camera: cameraRef.current,
-        hoverId: hover,
+        hoverId: hoverRef.current,
         width: w,
         height: h,
         time: t,
@@ -64,13 +77,13 @@ export function Overlook({onOpenForge, onOpenMatrix, onOpenSpotlight}: OverlookP
       cancelAnimationFrame(raf)
       ro.disconnect()
     }
-  }, [tribes, meta, hover])
+  }, []) // 只 mount 一次
 
   const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
-    const id = hitTest(mx, my, DEFAULT_PLACEMENTS, meta, cameraRef.current, rect.width, rect.height)
+    const id = hitTest(mx, my, DEFAULT_PLACEMENTS, metaRef.current, cameraRef.current, rect.width, rect.height)
     setHover(id)
   }
 

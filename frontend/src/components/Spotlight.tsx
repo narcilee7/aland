@@ -40,12 +40,9 @@ export function Spotlight() {
           <Search className="h-4 w-4 text-ink-faint shrink-0" />
           <input
             autoFocus
-            placeholder="Search tribes…  (Cmd+Shift+A to dismiss)"
+            placeholder="Search tribes…"
             className="flex-1 bg-transparent border-none outline-none text-sm text-ink placeholder:text-ink-faint font-mono"
           />
-          <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-ink-faint font-mono">
-            ESC
-          </kbd>
         </div>
 
         <div className="px-5 pb-2">
@@ -99,7 +96,6 @@ export function Spotlight() {
         <div className="flex items-center justify-between border-t border-white/5 bg-land-1/50 px-5 py-2 text-[10px] text-ink-faint font-mono">
           <span>↑↓ navigate</span>
           <span>↵ enter tribe</span>
-          <span>ESC close</span>
         </div>
       </DialogContent>
     </Dialog>
