@@ -4,9 +4,9 @@
 
 import type {EventsOn} from '../../wailsjs/runtime/runtime'
 
-// —— 与后端 core.Tribe 对齐 ——
+// —— 与后端 tribes.Tribe / tribes.Meta 对齐 ——
 
-export type TribeStatus = 'idle' | 'running' | 'busy' | 'error'
+export type Status = 'idle' | 'running' | 'busy' | 'error'
 
 export interface VitalSign {
   pid: number
@@ -18,20 +18,18 @@ export interface VitalSign {
   updatedAt: number
 }
 
-export interface Tribe {
-  id: string
-  name: string
-  eco: string
-  status: TribeStatus
-  vital: VitalSign
-}
-
 export interface TribeMeta {
   id: string
   name: string
   eco: string
   themeColor: string
   accentColor: string
+}
+
+export interface Tribe {
+  meta: TribeMeta
+  status: Status
+  vital: VitalSign
 }
 
 export interface Forge {
@@ -65,7 +63,6 @@ declare global {
   }
 }
 
-// 优雅降级：浏览器直接打开（wails dev 未启动）时返回空数据，避免崩溃。
 function wailsAvailable(): boolean {
   return typeof window !== 'undefined' && !!window.go?.main?.App
 }

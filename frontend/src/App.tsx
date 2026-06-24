@@ -1,8 +1,9 @@
-import {useEffect} from 'react'
-import {AnimatePresence, motion} from 'framer-motion'
-import {useAland} from './stores/alandStore'
-import {Overlook} from './components/Overlook'
-import {TribeView} from './components/TribeView'
+import { useEffect } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { useAland } from './stores/alandStore'
+import { Overlook } from './components/Overlook'
+import { TribeView } from './components/TribeView'
+import { Loader2 } from 'lucide-react'
 
 function App() {
   const view = useAland(s => s.view)
@@ -15,7 +16,7 @@ function App() {
   }, [boot])
 
   return (
-    <div style={{position: 'relative', width: '100%', height: '100%', overflow: 'hidden'}}>
+    <div className="relative w-full h-full overflow-hidden bg-land">
       {/* 俯瞰：始终渲染在底层，做推镜效果时不会被卸载 */}
       <Overlook />
 
@@ -24,11 +25,11 @@ function App() {
         {view === 'tribe' && (
           <motion.div
             key="tribe"
-            initial={{opacity: 0, scale: 0.92}}
-            animate={{opacity: 1, scale: 1}}
-            exit={{opacity: 0, scale: 0.92}}
-            transition={{type: 'spring', stiffness: 120, damping: 20}}
-            style={{position: 'absolute', inset: 0, zIndex: 10}}
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.92 }}
+            transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+            className="absolute inset-0 z-10"
           >
             <TribeView />
           </motion.div>
@@ -37,23 +38,9 @@ function App() {
 
       {/* 启动加载 */}
       {!booted && (
-        <div
-          className="draggable"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(10,14,26,0.8)',
-            zIndex: 100,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            color: 'var(--aland-text-dim)',
-            letterSpacing: 2,
-          }}
-        >
-          {booting ? 'AWAKENING THE LAND…' : 'STANDBY'}
+        <div className="draggable absolute inset-0 z-50 flex items-center justify-center bg-land-1/80 backdrop-blur-sm font-mono text-xs uppercase tracking-widest text-ink-dim">
+          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+          {booting ? 'Awakening the land…' : 'Standby'}
         </div>
       )}
     </div>

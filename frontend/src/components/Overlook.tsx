@@ -1,10 +1,11 @@
 // 大陆俯瞰——主界面。
 // Canvas 渲染等距地图，hover 高亮，点击进入部落。
 
-import {useEffect, useRef, useState} from 'react'
-import {useAland} from '../stores/alandStore'
-import {hitTest, renderLand, type Camera} from '../canvas/IsometricEngine'
-import {DEFAULT_PLACEMENTS} from '../canvas/layouts'
+import { useEffect, useRef, useState } from 'react'
+import { useAland } from '../stores/alandStore'
+import { hitTest, renderLand, type Camera } from '../canvas/IsometricEngine'
+import { DEFAULT_PLACEMENTS } from '../canvas/layouts'
+import { Badge, Button } from './ui'
 
 export function Overlook() {
   const tribes = useAland(s => s.tribes)
@@ -13,8 +14,8 @@ export function Overlook() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [hover, setHover] = useState<string | null>(null)
-  const cameraRef = useRef<Camera>({x: 0, y: 0, zoom: 1})
-  const sizeRef = useRef({w: 0, h: 0})
+  const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 })
+  const sizeRef = useRef({ w: 0, h: 0 })
 
   // 渲染循环
   useEffect(() => {
@@ -28,7 +29,7 @@ export function Overlook() {
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
-      sizeRef.current = {w: rect.width, h: rect.height}
+      sizeRef.current = { w: rect.width, h: rect.height }
       canvas.width = rect.width * dpr
       canvas.height = rect.height * dpr
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -38,7 +39,7 @@ export function Overlook() {
     ro.observe(canvas)
 
     const tick = (t: number) => {
-      const {w, h} = sizeRef.current
+      const { w, h } = sizeRef.current
       renderLand(ctx, {
         placements: DEFAULT_PLACEMENTS,
         tribes,
@@ -70,89 +71,55 @@ export function Overlook() {
     if (hover) enterTribe(hover)
   }
 
+  const runningCount = Object.values(tribes).filter(
+    t => t.status === 'running' || t.status === 'busy',
+  ).length
+
   return (
-    <div style={{position: 'relative', width: '100%', height: '100%'}}>
+    <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
-        style={{width: '100%', height: '100%', display: 'block'}}
+        className="block w-full h-full"
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
         onClick={onClick}
       />
 
-      {/* 顶部状态条（地图罗盘） */}
-      <div
-        className="draggable"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 32,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 16px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--aland-text-dim)',
-          letterSpacing: 1,
-          pointerEvents: 'none',
-        }}
-      >
-        <span>ALAND · AGENT LAND</span>
+      {/* 顶部罗盘 */}
+      <div className="draggable absolute top-0 inset-x-0 h-8 flex items-center justify-between px-4 font-mono text-[11px] tracking-wider text-ink-dim pointer-events-none">
+        <span>Aland · Agent Land</span>
         <span>{new Date().toLocaleTimeString()}</span>
       </div>
 
       {/* hover 提示 */}
       {hover && meta[hover] && (
         <div
-          className="interactive"
-          style={{
-            position: 'absolute',
-            bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '8px 16px',
-            background: 'rgba(10, 14, 26, 0.7)',
-            border: `1px solid ${meta[hover].themeColor}55`,
-            borderRadius: 4,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            color: meta[hover].accentColor,
-            backdropFilter: 'blur(8px)',
-            pointerEvents: 'auto',
-          }}
-          onClick={onClick}
+          className="interactive absolute bottom-12 left-1/2 -translate-x-1/2"
+          style={
+            {
+              // 动态注入部落色到 CSS 变量
+              ['--tribe-theme' as string]: meta[hover].themeColor,
+              ['--tribe-accent' as string]: meta[hover].accentColor,
+            } as React.CSSProperties
+          }
         >
-          {meta[hover].name} · click to enter →
+          <Button onClick={onClick} variant="default" size="md">
+            {meta[hover].name} · click to enter →
+          </Button>
         </div>
       )}
 
       {/* 底部状态栏 */}
-      <div
-        className="draggable"
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 24,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 24,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          color: 'var(--aland-text-faint)',
-          letterSpacing: 1,
-          pointerEvents: 'none',
-        }}
-      >
+      <div className="draggable absolute bottom-0 inset-x-0 h-6 flex items-center justify-center gap-6 font-mono text-[10px] tracking-wider text-ink-faint pointer-events-none">
         <span>TRIBES: {Object.keys(tribes).length || 0}</span>
-        <span>·</span>
-        <span>RUNNING: {Object.values(tribes).filter(t => t.status === 'running' || t.status === 'busy').length}</span>
+        <span className="text-ink-faint/40">·</span>
+        <span>RUNNING: {runningCount}</span>
+        <span className="text-ink-faint/40">·</span>
+        <span>{meta[hover ?? ''] ? `HOVER: ${meta[hover ?? ''].eco.toUpperCase()}` : 'IDLE'}</span>
       </div>
     </div>
   )
 }
+
+// 防止未使用的 Badge 引入被 tree-shake 警告
+void Badge

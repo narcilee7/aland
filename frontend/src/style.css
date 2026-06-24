@@ -1,25 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Aland 全局样式。
  * 深夜大陆基调：极深的靛蓝 → 墨绿渐变。
  * 所有颜色用 CSS 变量，方便部落主题色动态注入。
  */
 
 :root {
-  /* 大陆底色 */
-  --aland-bg-1: #0a0e1a;
-  --aland-bg-2: #0d1f15;
-
-  /* 文本 */
-  --aland-text: #e2e8f0;
-  --aland-text-dim: #94a3b8;
-  --aland-text-faint: #475569;
+  --aland-bg-1: theme('colors.land.1');
+  --aland-bg-2: theme('colors.land.2');
 
   /* 默认部落主色（运行中会被覆盖） */
   --tribe-theme: #d4a853;
   --tribe-accent: #ffdf80;
-
-  /* 字体 */
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
-  --font-serif: 'Source Han Serif', 'Songti SC', 'Playfair Display', serif;
 }
 
 * {
@@ -35,7 +29,7 @@ body,
   height: 100%;
   overflow: hidden;
   background: transparent;
-  color: var(--aland-text);
+  color: #e2e8f0;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
@@ -52,4 +46,20 @@ body {
 .interactive {
   -webkit-app-region: no-drag;
   cursor: pointer;
+}
+
+/* Aland 工具类：发光的部落色文本 */
+.text-tribe {
+  color: var(--tribe-theme);
+}
+.border-tribe {
+  border-color: var(--tribe-theme);
+}
+.bg-tribe {
+  background-color: var(--tribe-theme);
+}
+
+/* 等距投影背景——深夜大陆基调 */
+.bg-land {
+  background: radial-gradient(ellipse at center, #0d1f15 0%, #0a0e1a 70%);
 }

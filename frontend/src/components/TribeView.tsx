@@ -5,6 +5,8 @@
 import {useEffect, useState} from 'react'
 import {useAland} from '../stores/alandStore'
 import {getTribe, getTribeMeta, type Tribe, type TribeMeta} from '../api/wails'
+import {ArrowLeft} from 'lucide-react'
+import {Badge, Button, Card, CardContent, CardHeader, CardTitle, Separator} from './ui'
 
 export function TribeView() {
   const activeTribe = useAland(s => s.activeTribe)
@@ -22,7 +24,6 @@ export function TribeView() {
       setDetail(t)
       setTribeMeta(m)
     })
-    // 读取配置（M2+ 才会真正利用）
     if (window.go?.main?.App) {
       window.go.main.App.ReadTribeConfig(activeTribe).then(setConfig).catch(() => setConfig(null))
     }
@@ -33,108 +34,66 @@ export function TribeView() {
   const liveMeta = meta[activeTribe] || tribeMeta
   if (!liveMeta) return null
 
-  const accent = liveMeta.accentColor
-  const theme = liveMeta.themeColor
-
   return (
     <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'radial-gradient(ellipse at center, rgba(13,31,21,0.6) 0%, rgba(10,14,26,0.95) 70%)',
-        backdropFilter: 'blur(12px)',
-        padding: '48px 32px 32px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 24,
-      }}
+      className="absolute inset-0 p-12 flex flex-col gap-6 backdrop-blur-md"
+      style={
+        {
+          background: 'radial-gradient(ellipse at center, rgba(13,31,21,0.6) 0%, rgba(10,14,26,0.95) 70%)',
+          ['--tribe-theme' as string]: liveMeta.themeColor,
+          ['--tribe-accent' as string]: liveMeta.accentColor,
+        } as React.CSSProperties
+      }
     >
       {/* 顶部：返回 + 标题 */}
-      <div
-        className="draggable"
-        style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}
-      >
-        <button
-          className="interactive"
-          onClick={returnOverlook}
-          style={{
-            background: 'transparent',
-            border: `1px solid ${theme}55`,
-            color: theme,
-            padding: '6px 12px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            borderRadius: 3,
-            cursor: 'pointer',
-          }}
-        >
-          ← BACK TO OVERLOOK
-        </button>
-        <h1
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 18,
-            fontWeight: 500,
-            color: accent,
-            letterSpacing: 2,
-          }}
-        >
-          {liveMeta.name.toUpperCase()}
+      <div className="draggable flex items-center justify-between">
+        <Button onClick={returnOverlook} variant="outline" size="md">
+          <ArrowLeft className="h-3 w-3" />
+          Back to Overlook
+        </Button>
+        <h1 className="m-0 font-mono text-lg font-medium uppercase tracking-widest text-tribe">
+          {liveMeta.name}
         </h1>
-        <span style={{width: 120}} />
+        <div className="w-[120px] flex justify-end">
+          {liveTribe && <Badge status={liveTribe.status} />}
+        </div>
       </div>
 
+      <Separator />
+
       {/* 生命体征卡片 */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 16,
-          fontFamily: 'var(--font-mono)',
-        }}
-      >
-        <VitalCard label="STATUS" value={liveTribe?.status ?? '—'} color={theme} />
-        <VitalCard label="PID" value={String(liveTribe?.vital.pid ?? '—')} color={accent} />
-        <VitalCard label="CPU" value={`${(liveTribe?.vital.cpu ?? 0).toFixed(1)}%`} color={accent} />
-        <VitalCard label="MEMORY" value={`${(liveTribe?.vital.memory ?? 0).toFixed(0)}MB`} color={accent} />
+      <div className="grid grid-cols-4 gap-4 font-mono">
+        <VitalCard label="Status" value={liveTribe?.status ?? '—'} />
+        <VitalCard label="PID" value={String(liveTribe?.vital.pid ?? '—')} />
+        <VitalCard label="CPU" value={`${(liveTribe?.vital.cpu ?? 0).toFixed(1)}%`} />
+        <VitalCard label="Memory" value={`${(liveTribe?.vital.memory ?? 0).toFixed(0)}MB`} />
       </div>
 
       {/* 配置预览（M0 只读，M2+ 才是 Helix 双螺旋） */}
-      <div
-        style={{
-          flex: 1,
-          background: 'rgba(0,0,0,0.3)',
-          border: `1px solid ${theme}22`,
-          borderRadius: 4,
-          padding: 16,
-          overflow: 'auto',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
-          color: 'var(--aland-text-dim)',
-        }}
-      >
-        <div style={{color: theme, marginBottom: 8, letterSpacing: 1}}>CONFIG (read-only · M2+ will add Helix)</div>
-        <pre style={{margin: 0}}>{config ? JSON.stringify(config, null, 2) : '(no config found)'}</pre>
-      </div>
+      <Card className="flex-1 overflow-hidden">
+        <CardHeader>
+          <CardTitle>Config · read-only</CardTitle>
+          <span className="text-[10px] text-ink-faint font-mono">M2+ will replace with Helix</span>
+        </CardHeader>
+        <CardContent className="overflow-auto">
+          <pre className="m-0 font-mono text-xs text-ink-dim whitespace-pre-wrap break-all">
+            {config ? JSON.stringify(config, null, 2) : '(no config found)'}
+          </pre>
+        </CardContent>
+      </Card>
     </div>
   )
 }
 
-function VitalCard({label, value, color}: {label: string; value: string; color: string}) {
+function VitalCard({label, value}: {label: string; value: string}) {
   return (
-    <div
-      style={{
-        background: 'rgba(0,0,0,0.25)',
-        border: `1px solid ${color}22`,
-        borderRadius: 4,
-        padding: 16,
-      }}
-    >
-      <div style={{fontSize: 10, color: 'var(--aland-text-faint)', letterSpacing: 1, marginBottom: 6}}>
-        {label}
-      </div>
-      <div style={{fontSize: 18, color, fontWeight: 500}}>{value}</div>
-    </div>
+    <Card>
+      <CardContent className="py-4">
+        <div className="text-[10px] uppercase tracking-wider text-ink-faint mb-2 font-mono">
+          {label}
+        </div>
+        <div className="text-lg text-tribe font-medium font-mono">{value}</div>
+      </CardContent>
+    </Card>
   )
 }
