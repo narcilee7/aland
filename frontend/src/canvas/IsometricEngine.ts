@@ -48,7 +48,9 @@ export function unproject(sx: number, sy: number, camera: Camera = {x: 0, y: 0, 
   return {x, y}
 }
 
-/** 把 hex 顶点画到 canvas */
+/** 把 hex 顶点画到 canvas。
+ * cpu: 0-100 真实 CPU 占用，影响呼吸频率和振幅。
+ */
 function drawIsoBlob(
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -58,18 +60,24 @@ function drawIsoBlob(
   glow: string,
   time: number,
   pulse: number,
+  cpu: number,
 ) {
+  // 光晕半径随 CPU 增大（高负载时发热）
+  const glowSize = radius * (2.4 + cpu * 0.01)
+
   // 光晕
-  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2.4)
+  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowSize)
   grd.addColorStop(0, glow)
   grd.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = grd
   ctx.beginPath()
-  ctx.arc(cx, cy, radius * 2.4, 0, Math.PI * 2)
+  ctx.arc(cx, cy, glowSize, 0, Math.PI * 2)
   ctx.fill()
 
-  // 主体：等距椭圆，随呼吸缩放
-  const breath = 1 + 0.04 * Math.sin(time / 800)
+  // 主体：等距椭圆，呼吸频率随 CPU 加快
+  // CPU=0 时周期 4s；CPU=100 时周期 ~1s
+  const period = 4000 / (1 + cpu * 0.04)
+  const breath = 1 + 0.03 * Math.sin(time / period)
   const r = radius * breath
   ctx.save()
   ctx.translate(cx, cy)
@@ -79,9 +87,10 @@ function drawIsoBlob(
   ctx.arc(0, 0, r, 0, Math.PI * 2)
   ctx.fill()
 
-  // 中心核——运行中时更亮
+  // 中心核——运行中时更亮，且 CPU 高时偏白
   if (pulse > 0) {
-    ctx.fillStyle = `rgba(255,255,255,${0.2 + 0.3 * pulse})`
+    const intensity = 0.2 + 0.3 * pulse + cpu * 0.002
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(intensity, 0.9)})`
     ctx.beginPath()
     ctx.arc(0, -r * 0.15, r * 0.35, 0, Math.PI * 2)
     ctx.fill()
@@ -140,10 +149,11 @@ export function renderLand(ctx: CanvasRenderingContext2D, input: RenderInput) {
     const {sx, sy} = project(place.x, place.y, place.z, {x: cx, y: cy, zoom: camera.zoom})
     const isHover = place.id === hoverId
     const isRunning = t?.status === 'running' || t?.status === 'busy'
+    const cpu = t?.vital.cpu ?? 0
     const pulse = isRunning ? 0.5 + 0.5 * Math.sin(time / 600) : 0
     const radius = (isHover ? 22 : 18) * camera.zoom
 
-    drawIsoBlob(ctx, sx, sy, radius, m.themeColor, m.accentColor + '55', time, pulse)
+    drawIsoBlob(ctx, sx, sy, radius, m.themeColor, m.accentColor + '55', time, pulse, cpu)
 
     // 部落名（地图标注风格）
     ctx.fillStyle = isHover ? '#ffffff' : 'rgba(226, 232, 240, 0.85)'
@@ -162,15 +172,38 @@ export function renderLand(ctx: CanvasRenderingContext2D, input: RenderInput) {
     }
   }
 
-  // —— 4. 中央圣所（占位：M0 留白）——
+  // —— 4. 中央圣所：Forge 液面（绿色基调）——
   const center = project(0, 0, 0, {x: cx, y: cy, zoom: camera.zoom})
-  ctx.strokeStyle = 'rgba(212, 168, 83, 0.25)'
+  const forgeRadius = 30 * camera.zoom
+  // 液面：翠绿径向
+  const forgeGrd = ctx.createRadialGradient(
+    center.sx,
+    center.sy - forgeRadius * 0.2,
+    0,
+    center.sx,
+    center.sy,
+    forgeRadius,
+  )
+  forgeGrd.addColorStop(0, 'rgba(34, 197, 94, 0.25)')
+  forgeGrd.addColorStop(0.6, 'rgba(34, 197, 94, 0.08)')
+  forgeGrd.addColorStop(1, 'rgba(34, 197, 94, 0)')
+  ctx.fillStyle = forgeGrd
+  ctx.beginPath()
+  ctx.arc(center.sx, center.sy, forgeRadius, 0, Math.PI * 2)
+  ctx.fill()
+  // 边框
+  ctx.strokeStyle = 'rgba(212, 168, 83, 0.35)'
   ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.arc(center.sx, center.sy, 30 * camera.zoom, 0, Math.PI * 2)
+  ctx.arc(center.sx, center.sy, forgeRadius, 0, Math.PI * 2)
   ctx.stroke()
-  ctx.fillStyle = 'rgba(212, 168, 83, 0.08)'
-  ctx.fill()
+  // 中央文字
+  ctx.fillStyle = 'rgba(212, 168, 83, 0.7)'
+  ctx.font = `${9 * camera.zoom}px 'JetBrains Mono', monospace`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('FORGE', center.sx, center.sy - 4)
+  ctx.fillText('○', center.sx, center.sy + 8)
 }
 
 /** 根据鼠标位置判断 hover 到哪个部落（轴对齐包围盒近似） */

@@ -4,6 +4,8 @@ import {useAland} from './stores/alandStore'
 import {Overlook} from './components/Overlook'
 import {TribeView} from './components/TribeView'
 import {Spotlight} from './components/Spotlight'
+import {Forge} from './components/Forge'
+import {CapabilityMatrix} from './components/CapabilityMatrix'
 import {Loader2} from 'lucide-react'
 import {TooltipProvider} from './components/ui'
 
@@ -12,6 +14,10 @@ function App() {
   const boot = useAland(s => s.boot)
   const booted = useAland(s => s.booted)
   const booting = useAland(s => s.booting)
+  const forgeOpen = useAland(s => s.forgeOpen)
+  const setForgeOpen = useAland(s => s.setForgeOpen)
+  const matrixOpen = useAland(s => s.matrixOpen)
+  const setMatrixOpen = useAland(s => s.setMatrixOpen)
 
   useEffect(() => {
     boot()
@@ -20,10 +26,13 @@ function App() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="relative w-full h-full overflow-hidden bg-land">
-        {/* 俯瞰：始终渲染在底层，做推镜效果时不会被卸载 */}
-        <Overlook />
+        {/* 俯瞰 */}
+        <Overlook
+          onOpenForge={() => setForgeOpen(true)}
+          onOpenMatrix={() => setMatrixOpen(true)}
+        />
 
-        {/* 部落视图：覆盖在俯瞰之上，推镜转场进入 */}
+        {/* 部落视图 */}
         <AnimatePresence>
           {view === 'tribe' && (
             <motion.div
@@ -39,7 +48,13 @@ function App() {
           )}
         </AnimatePresence>
 
-        {/* Spotlight：Cmd+Shift+A 唤起，z 最高 */}
+        {/* Forge */}
+        <Forge open={forgeOpen} onOpenChange={setForgeOpen} />
+
+        {/* Capability Matrix */}
+        <CapabilityMatrix open={matrixOpen} onOpenChange={setMatrixOpen} />
+
+        {/* Spotlight */}
         <Spotlight />
 
         {/* 启动加载 */}

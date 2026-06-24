@@ -23,6 +23,8 @@ const (
 	FSChange = "fs:change"
 	// SpotlightToggle 全局快捷键 Cmd+Shift+A 触发时推送。
 	SpotlightToggle = "spotlight:toggle"
+	// SessionEvent session 实时 tail 事件。
+	SessionEvent = "session:event"
 )
 
 // TribeLifecycleEvent tribe:born / tribe:death 的 payload。
