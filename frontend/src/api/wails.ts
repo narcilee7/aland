@@ -85,6 +85,10 @@ export interface Capabilities {
   sessionTail: boolean
   tokens: boolean
   tokensLive: boolean
+  // Sprint 4 新增
+  todos: boolean
+  subagents: boolean
+  compacts: boolean
   features: Feature[]
 }
 
@@ -264,6 +268,37 @@ export interface Permissions {
   ask: string[]
 }
 
+// —— Todos / Subagents / Compact ——
+
+export type TodoStatus = 'pending' | 'in_progress' | 'completed'
+
+export interface Todo {
+  content: string
+  status: TodoStatus
+  activeForm?: string
+}
+
+export interface AgentNode {
+  id: string
+  type: string
+  description: string
+  prompt?: string
+  status: string
+  startedAt: number
+  endedAt: number
+  messageCount: number
+  toolUseCount: number
+  children: AgentNode[]
+}
+
+export interface CompactEvent {
+  sessionId: string
+  trigger: string
+  preTokens: number
+  timestamp: number
+  at: number
+}
+
 // —— 类型安全的 Wails 桥 ——
 
 declare global {
@@ -308,6 +343,11 @@ declare global {
           HookServerPort(): Promise<number>
           GetPermissions(): Promise<Permissions>
           TogglePermission(category: string, rule: string): Promise<Permissions>
+
+          // Todos / Subagents / Compact
+          ListTodos(id: string, sessionId: string): Promise<Todo[]>
+          GetSubagentTree(id: string, sessionId: string): Promise<AgentNode | null>
+          ListCompactEvents(id: string, sessionId: string): Promise<CompactEvent[]>
         }
       }
     }
@@ -527,5 +567,34 @@ export async function togglePermission(category: string, rule: string): Promise<
     return toCamel<Permissions>(await window.go.backend.App.TogglePermission(category, rule))
   } catch {
     return null
+  }
+}
+
+// —— Todos / Subagents / Compact API ——
+
+export async function listTodos(id: string, sessionId: string): Promise<Todo[]> {
+  if (!wailsAvailable()) return []
+  try {
+    return toCamel<Todo[]>(await window.go.backend.App.ListTodos(id, sessionId))
+  } catch {
+    return []
+  }
+}
+
+export async function getSubagentTree(id: string, sessionId: string): Promise<AgentNode | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<AgentNode>(await window.go.backend.App.GetSubagentTree(id, sessionId))
+  } catch {
+    return null
+  }
+}
+
+export async function listCompactEvents(id: string, sessionId: string): Promise<CompactEvent[]> {
+  if (!wailsAvailable()) return []
+  try {
+    return toCamel<CompactEvent[]>(await window.go.backend.App.ListCompactEvents(id, sessionId))
+  } catch {
+    return []
   }
 }
