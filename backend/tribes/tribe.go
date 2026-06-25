@@ -95,6 +95,9 @@ type Land struct {
 	todos      map[string]TodoLister
 	subagents  map[string]SubagentTreeLister
 	compacts   map[string]CompactLister
+
+	// Sprint 5 新增
+	memories map[string]MemoryReader
 }
 
 // NewLand 构造一片空大陆。
@@ -119,6 +122,7 @@ func NewLand() *Land {
 		todos:         make(map[string]TodoLister),
 		subagents:     make(map[string]SubagentTreeLister),
 		compacts:      make(map[string]CompactLister),
+		memories:      make(map[string]MemoryReader),
 	}
 }
 
@@ -193,6 +197,9 @@ func (l *Land) Register(adapter any) error {
 	}
 	if cl, ok := adapter.(CompactLister); ok {
 		l.compacts[m.ID] = cl
+	}
+	if mr, ok := adapter.(MemoryReader); ok {
+		l.memories[m.ID] = mr
 	}
 	return nil
 }
@@ -318,6 +325,14 @@ func (l *Land) Compacts(id string) (CompactLister, bool) {
 	defer l.mu.RUnlock()
 	c, ok := l.compacts[id]
 	return c, ok
+}
+
+// Memories 取出一个部落的 memory 读取器。
+func (l *Land) Memories(id string) (MemoryReader, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	m, ok := l.memories[id]
+	return m, ok
 }
 
 // ConfigParse 取出一个部落的配置结构化解析器。

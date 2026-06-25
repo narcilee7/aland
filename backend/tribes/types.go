@@ -238,3 +238,34 @@ type CompactEvent struct {
 	Timestamp  int64  `json:"timestamp"`  // unix ms
 	At         int64  `json:"at"`         // 同上冗余字段，方便前端
 }
+
+// MemorySource CLAUDE.md 的来源。
+type MemorySource struct {
+	Path  string `json:"path"`  // 绝对路径
+	Scope string `json:"scope"` // "user" | "project" | "local"
+}
+
+// MemorySection CLAUDE.md 的一个章节（# 标题 + 下方正文）。
+type MemorySection struct {
+	Title   string `json:"title"`   // 去掉 # 的标题
+	Level   int    `json:"level"`   // 1-6
+	Content string `json:"content"` // 该章节下的 markdown（不含标题本身）
+	Order   int    `json:"order"`   // 章节顺序（0-indexed）
+}
+
+// MemoryImport @file 导入引用。
+type MemoryImport struct {
+	Path string `json:"path"` // @ 后面的路径
+	Line int    `json:"line"` // 出现在文件的哪一行
+}
+
+// MemoryDoc 解析后的 CLAUDE.md 完整结构。
+type MemoryDoc struct {
+	Source      MemorySource   `json:"source"`
+	Frontmatter string         `json:"frontmatter"` // YAML（不含 --- 包裹符）
+	Sections    []MemorySection `json:"sections"`
+	Imports     []MemoryImport  `json:"imports"`
+	Body        string         `json:"body"`        // 完整正文（含标题）
+	ModifiedAt  int64          `json:"modifiedAt"`  // unix ms
+	SizeBytes   int64          `json:"sizeBytes"`
+}

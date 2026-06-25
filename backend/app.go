@@ -547,3 +547,32 @@ func (a *App) ListCompactEvents(id, sessionID string) ([]tribes.CompactEvent, er
 	}
 	return cl.ListCompactEvents(sessionID)
 }
+
+// ===== CLAUDE.md Memory =====
+
+// FindMemories 探测所有可用的 CLAUDE.md（project + user global）。
+func (a *App) FindMemories(id, cwd string) ([]tribes.MemorySource, error) {
+	mr, ok := a.land.Memories(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no memory reader", id)
+	}
+	return mr.FindMemories(cwd)
+}
+
+// ReadMemory 解析单个 CLAUDE.md。
+func (a *App) ReadMemory(id, path string) (*tribes.MemoryDoc, error) {
+	mr, ok := a.land.Memories(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no memory reader", id)
+	}
+	return mr.ReadMemory(path)
+}
+
+// SaveMemory 写回 CLAUDE.md。带 backup。
+func (a *App) SaveMemory(id, path, body, frontmatter string) error {
+	mr, ok := a.land.Memories(id)
+	if !ok {
+		return fmt.Errorf("tribe %s has no memory reader", id)
+	}
+	return mr.SaveMemory(path, body, frontmatter)
+}

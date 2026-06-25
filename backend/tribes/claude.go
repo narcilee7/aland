@@ -67,6 +67,9 @@ func (c *ClaudeAdapter) Capabilities() Capabilities {
 		Subagents: true, // 构建 Task 派生的 agent 树
 		Compacts:  true, // compact_boundary 事件
 
+		// Sprint 5 新增
+		Memory: true, // CLAUDE.md 可视化编辑
+
 		Features: []Feature{
 			{ID: FeatureMCPServers, Label: "MCP Servers", Description: "Model Context Protocol servers configured for this CLI", HasData: true},
 			{ID: FeatureSkills, Label: "Skills", Description: "Custom slash commands and skills loaded", HasData: true},

@@ -34,6 +34,9 @@ type Capabilities struct {
 	Subagents bool // GetSubagentTree：构建 Task 工具派生的 agent 树
 	Compacts  bool // ListCompactEvents：列出 compact_boundary 事件
 
+	// Sprint 5 新增
+	Memory bool // FindMemories/ReadMemory/SaveMemory：CLAUDE.md 可视化编辑
+
 	// 扩展 feature——CLI 特定的能力
 	// 比如 Claude 的 "mcp_servers"、Cursor 的 "extensions"
 	// 用 Feature.ID 路由到具体 UI

@@ -114,3 +114,14 @@ type SubagentTreeLister interface {
 type CompactLister interface {
 	ListCompactEvents(sessionID string) ([]CompactEvent, error)
 }
+
+// MemoryReader 读取 CLAUDE.md（项目级 + 用户级）。
+//
+// FindMemories 返回所有可用的 CLAUDE.md 路径；
+// ReadMemory 按 path 解析单个文件；
+// SaveMemory 写回（带 backup）。
+type MemoryReader interface {
+	FindMemories(cwd string) ([]MemorySource, error)
+	ReadMemory(path string) (*MemoryDoc, error)
+	SaveMemory(path, body, frontmatter string) error
+}
