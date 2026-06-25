@@ -62,6 +62,11 @@ func (c *ClaudeAdapter) Capabilities() Capabilities {
 		Tokens:      true,
 		TokensLive:  true, // 实时增量：来自 session stream 的 SessionEvent.Tokens
 
+		// Sprint 4 新增
+		Todos:     true, // 解析 TodoWrite 工具调用
+		Subagents: true, // 构建 Task 派生的 agent 树
+		Compacts:  true, // compact_boundary 事件
+
 		Features: []Feature{
 			{ID: FeatureMCPServers, Label: "MCP Servers", Description: "Model Context Protocol servers configured for this CLI", HasData: true},
 			{ID: FeatureSkills, Label: "Skills", Description: "Custom slash commands and skills loaded", HasData: true},

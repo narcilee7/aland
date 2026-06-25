@@ -518,3 +518,32 @@ func (a *App) GetPermissions() (hooks.Permissions, error) {
 func (a *App) TogglePermission(category, rule string) (hooks.Permissions, error) {
 	return hooks.TogglePermission(category, rule)
 }
+
+// ===== Todos / Subagents / Compact =====
+
+// ListTodos 读取某 session 的最新 todo 快照。
+func (a *App) ListTodos(id, sessionID string) ([]tribes.Todo, error) {
+	tl, ok := a.land.Todos(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no todo lister", id)
+	}
+	return tl.ListTodos(sessionID)
+}
+
+// GetSubagentTree 读取某 session 的子 agent 树。
+func (a *App) GetSubagentTree(id, sessionID string) (*tribes.AgentNode, error) {
+	sl, ok := a.land.Subagents(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no subagent lister", id)
+	}
+	return sl.GetSubagentTree(sessionID)
+}
+
+// ListCompactEvents 列出 session 的 compact 事件。
+func (a *App) ListCompactEvents(id, sessionID string) ([]tribes.CompactEvent, error) {
+	cl, ok := a.land.Compacts(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no compact lister", id)
+	}
+	return cl.ListCompactEvents(sessionID)
+}

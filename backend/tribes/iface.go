@@ -97,3 +97,20 @@ type SessionStreamer interface {
 type SessionReader interface {
 	ReadSession(id string) ([]SessionEvent, error)
 }
+
+// TodoLister 列出某 session 的当前 todo 列表。
+// 返回的是该 session 最新一次 TodoWrite 调用的快照。
+type TodoLister interface {
+	ListTodos(sessionID string) ([]Todo, error)
+}
+
+// SubagentTreeLister 列出某 session 的子 agent 树。
+// 从 Task 工具调用 + agent_id 关联构建父子关系。
+type SubagentTreeLister interface {
+	GetSubagentTree(sessionID string) (*AgentNode, error)
+}
+
+// CompactLister 列出 session 中的 compact 事件。
+type CompactLister interface {
+	ListCompactEvents(sessionID string) ([]CompactEvent, error)
+}

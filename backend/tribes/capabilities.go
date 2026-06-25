@@ -29,6 +29,11 @@ type Capabilities struct {
 	Tokens     bool // ParseTokenUsage：能算历史/今日 token
 	TokensLive bool // StreamTokenUsage：能看实时单次调用 cost
 
+	// Sprint 4 新增
+	Todos     bool // ListTodos：从 session 提取 TodoWrite 工具调用
+	Subagents bool // GetSubagentTree：构建 Task 工具派生的 agent 树
+	Compacts  bool // ListCompactEvents：列出 compact_boundary 事件
+
 	// 扩展 feature——CLI 特定的能力
 	// 比如 Claude 的 "mcp_servers"、Cursor 的 "extensions"
 	// 用 Feature.ID 路由到具体 UI
