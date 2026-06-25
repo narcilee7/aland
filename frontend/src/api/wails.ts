@@ -89,6 +89,8 @@ export interface Capabilities {
   todos: boolean
   subagents: boolean
   compacts: boolean
+  // Sprint 5 新增
+  memory: boolean
   features: Feature[]
 }
 
@@ -299,6 +301,35 @@ export interface CompactEvent {
   at: number
 }
 
+// —— CLAUDE.md Memory ——
+
+export interface MemorySource {
+  path: string
+  scope: 'user' | 'project' | 'local'
+}
+
+export interface MemorySection {
+  title: string
+  level: number
+  content: string
+  order: number
+}
+
+export interface MemoryImport {
+  path: string
+  line: number
+}
+
+export interface MemoryDoc {
+  source: MemorySource
+  frontmatter: string
+  sections: MemorySection[]
+  imports: MemoryImport[]
+  body: string
+  modifiedAt: number
+  sizeBytes: number
+}
+
 // —— 类型安全的 Wails 桥 ——
 
 declare global {
@@ -348,6 +379,11 @@ declare global {
           ListTodos(id: string, sessionId: string): Promise<Todo[]>
           GetSubagentTree(id: string, sessionId: string): Promise<AgentNode | null>
           ListCompactEvents(id: string, sessionId: string): Promise<CompactEvent[]>
+
+          // CLAUDE.md Memory
+          FindMemories(id: string, cwd: string): Promise<MemorySource[]>
+          ReadMemory(id: string, path: string): Promise<MemoryDoc | null>
+          SaveMemory(id: string, path: string, body: string, frontmatter: string): Promise<void>
         }
       }
     }
@@ -596,5 +632,35 @@ export async function listCompactEvents(id: string, sessionId: string): Promise<
     return toCamel<CompactEvent[]>(await window.go.backend.App.ListCompactEvents(id, sessionId))
   } catch {
     return []
+  }
+}
+
+// —— Memory API ——
+
+export async function findMemories(id: string, cwd: string): Promise<MemorySource[]> {
+  if (!wailsAvailable()) return []
+  try {
+    return toCamel<MemorySource[]>(await window.go.backend.App.FindMemories(id, cwd))
+  } catch {
+    return []
+  }
+}
+
+export async function readMemory(id: string, path: string): Promise<MemoryDoc | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<MemoryDoc>(await window.go.backend.App.ReadMemory(id, path))
+  } catch {
+    return null
+  }
+}
+
+export async function saveMemory(id: string, path: string, body: string, frontmatter: string): Promise<boolean> {
+  if (!wailsAvailable()) return false
+  try {
+    await window.go.backend.App.SaveMemory(id, path, body, frontmatter)
+    return true
+  } catch {
+    return false
   }
 }

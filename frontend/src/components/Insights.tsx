@@ -27,12 +27,13 @@ import {
 import { onSessionEvent } from '../api/events'
 import { streamLatestSession, stopLatestSession } from '../api/wails'
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from './ui'
-import { Plug, Sparkles, Wrench, FileText, History, RotateCcw, Activity, Terminal, Play, Square, Coins, Hammer, Shield, ListChecks, GitBranch, Zap } from 'lucide-react'
+import { Plug, Sparkles, Wrench, FileText, History, RotateCcw, Activity, Terminal, Play, Square, Coins, Hammer, Shield, ListChecks, GitBranch, Zap, Brain } from 'lucide-react'
 import { ToolChain } from './ToolChain'
 import { PermissionsPanel } from './PermissionsPanel'
 import { TodoPanel } from './TodoPanel'
 import { SubagentTree } from './SubagentTree'
 import { CompactPanel } from './CompactPanel'
+import { MemoryView } from './MemoryView'
 import { logger } from '../lib/logger'
 
 interface InsightsProps {
@@ -45,12 +46,14 @@ interface InsightsProps {
     todos?: boolean
     subagents?: boolean
     compacts?: boolean
+    memory?: boolean
   }
 }
 
 export function Insights({ tribeId, caps }: InsightsProps) {
   const [tab, setTab] = useState<
-    'mcp' | 'skills' | 'plugins' | 'plans' | 'history' | 'activity' | 'tail' | 'chain' | 'perms' | 'todos' | 'agents' | 'compact'
+    | 'mcp' | 'skills' | 'plugins' | 'plans' | 'history' | 'activity'
+    | 'tail' | 'chain' | 'perms' | 'todos' | 'agents' | 'compact' | 'memory'
   >('mcp')
 
   return (
@@ -119,6 +122,12 @@ export function Insights({ tribeId, caps }: InsightsProps) {
               Compact
             </TabBtn>
           )}
+          {caps.memory && (
+            <TabBtn active={tab === 'memory'} onClick={() => setTab('memory')}>
+              <Brain className="h-3 w-3" />
+              Memory
+            </TabBtn>
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-auto min-h-0">
@@ -134,6 +143,7 @@ export function Insights({ tribeId, caps }: InsightsProps) {
         {tab === 'todos' && <TodoTab tribeId={tribeId} />}
         {tab === 'agents' && <AgentsTab tribeId={tribeId} />}
         {tab === 'compact' && <CompactTab tribeId={tribeId} />}
+        {tab === 'memory' && <MemoryTab tribeId={tribeId} />}
       </CardContent>
     </Card>
   )
@@ -416,6 +426,12 @@ function AgentsTab({tribeId}: {tribeId: string}) {
 function CompactTab({tribeId}: {tribeId: string}) {
   const sessionId = useLatestSessionId(tribeId)
   return <CompactPanel tribeId={tribeId} sessionId={sessionId} />
+}
+
+function MemoryTab({tribeId}: {tribeId: string}) {
+  // 从 store 拿当前 tribe 的 cwd
+  const cwd = useAland(s => s.tribes[tribeId]?.vital?.cwd ?? '')
+  return <MemoryView tribeId={tribeId} cwd={cwd} />
 }
 
 // 拿到某个 tribe 的"最新" session id。
