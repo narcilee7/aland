@@ -1,15 +1,19 @@
+// Package events 把事件名 + payload 投递给 Wails runtime。
+//
+// 抽象这一层有两个目的：
+//   1. 调用方不需要重复 import wails runtime
+//   2. 后续可以换实现（测试时塞 channel、生产时塞 Wails）
 package events
 
 import (
 	"context"
 
+	"github.com/narcilee7/aland/backend/core"
+	"github.com/narcilee7/aland/backend/hooks"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Emitter 把事件名 + payload 投递给 Wails runtime。
-// 抽象这一层有两个目的：
-//   1. 调用方不需要重复 import wails runtime
-//   2. 后续可以换实现（测试时塞 channel、生产时塞 Wails）
 type Emitter struct {
 	ctx context.Context
 }
@@ -55,4 +59,21 @@ func (e *Emitter) EmitSpotlightToggle(action string) {
 // EmitSessionEvent session:event 的快捷方法。
 func (e *Emitter) EmitSessionEvent(ev any) {
 	e.Emit(SessionEvent, ev)
+}
+
+// EmitEyeUpdate eye:update 的快捷方法。
+// 接受构造好的 payload（避免把含 mutex 的 EyeState 整个 by value 传进来）。
+func (e *Emitter) EmitEyeUpdate(ev EyeUpdateEvent) {
+	e.Emit(EyeUpdate, ev)
+}
+
+// EmitEyeFlash eye:flash 的快捷方法。
+// Flash 是值类型不含锁，安全 by value。
+func (e *Emitter) EmitEyeFlash(flash core.Flash) {
+	e.Emit(EyeFlash, EyeFlashEvent{Flash: flash})
+}
+
+// EmitHook claude:hook 的快捷方法。直接把 hook payload 转发给前端。
+func (e *Emitter) EmitHook(p hooks.HookPayload) {
+	e.Emit(HookEvent, p)
 }

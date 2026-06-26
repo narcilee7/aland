@@ -10,6 +10,7 @@ import {
   listPlans,
   listFileHistory,
   listPlugins,
+  listSessions,
   restoreFile,
   listDailyActivity,
   recentSlashCommands,
@@ -26,7 +27,13 @@ import {
 import { onSessionEvent } from '../api/events'
 import { streamLatestSession, stopLatestSession } from '../api/wails'
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from './ui'
-import { Plug, Sparkles, Wrench, FileText, History, RotateCcw, Activity, Terminal, Play, Square, Coins } from 'lucide-react'
+import { Plug, Sparkles, Wrench, FileText, History, RotateCcw, Activity, Terminal, Play, Square, Coins, Hammer, Shield, ListChecks, GitBranch, Zap, Brain } from 'lucide-react'
+import { ToolChain } from './ToolChain'
+import { PermissionsPanel } from './PermissionsPanel'
+import { TodoPanel } from './TodoPanel'
+import { SubagentTree } from './SubagentTree'
+import { CompactPanel } from './CompactPanel'
+import { MemoryView } from './MemoryView'
 import { logger } from '../lib/logger'
 
 interface InsightsProps {
@@ -36,11 +43,18 @@ interface InsightsProps {
     sessionTail: boolean
     tokens: boolean
     tokensLive: boolean
+    todos?: boolean
+    subagents?: boolean
+    compacts?: boolean
+    memory?: boolean
   }
 }
 
 export function Insights({ tribeId, caps }: InsightsProps) {
-  const [tab, setTab] = useState<'mcp' | 'skills' | 'plugins' | 'plans' | 'history' | 'activity' | 'tail'>('mcp')
+  const [tab, setTab] = useState<
+    | 'mcp' | 'skills' | 'plugins' | 'plans' | 'history' | 'activity'
+    | 'tail' | 'chain' | 'perms' | 'todos' | 'agents' | 'compact' | 'memory'
+  >('mcp')
 
   return (
     <Card className="flex flex-col min-h-0">
@@ -82,6 +96,38 @@ export function Insights({ tribeId, caps }: InsightsProps) {
               Live
             </TabBtn>
           )}
+          <TabBtn active={tab === 'chain'} onClick={() => setTab('chain')}>
+            <Hammer className="h-3 w-3" />
+            Chain
+          </TabBtn>
+          <TabBtn active={tab === 'perms'} onClick={() => setTab('perms')}>
+            <Shield className="h-3 w-3" />
+            Perms
+          </TabBtn>
+          {caps.todos && (
+            <TabBtn active={tab === 'todos'} onClick={() => setTab('todos')}>
+              <ListChecks className="h-3 w-3" />
+              Todos
+            </TabBtn>
+          )}
+          {caps.subagents && (
+            <TabBtn active={tab === 'agents'} onClick={() => setTab('agents')}>
+              <GitBranch className="h-3 w-3" />
+              Agents
+            </TabBtn>
+          )}
+          {caps.compacts && (
+            <TabBtn active={tab === 'compact'} onClick={() => setTab('compact')}>
+              <Zap className="h-3 w-3" />
+              Compact
+            </TabBtn>
+          )}
+          {caps.memory && (
+            <TabBtn active={tab === 'memory'} onClick={() => setTab('memory')}>
+              <Brain className="h-3 w-3" />
+              Memory
+            </TabBtn>
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-auto min-h-0">
@@ -92,6 +138,12 @@ export function Insights({ tribeId, caps }: InsightsProps) {
         {tab === 'history' && <HistoryTab tribeId={tribeId} />}
         {tab === 'activity' && <ActivityTab tribeId={tribeId} />}
         {tab === 'tail' && <LiveTailTab tribeId={tribeId} />}
+        {tab === 'chain' && <ToolChain />}
+        {tab === 'perms' && <PermissionsPanel />}
+        {tab === 'todos' && <TodoTab tribeId={tribeId} />}
+        {tab === 'agents' && <AgentsTab tribeId={tribeId} />}
+        {tab === 'compact' && <CompactTab tribeId={tribeId} />}
+        {tab === 'memory' && <MemoryTab tribeId={tribeId} />}
       </CardContent>
     </Card>
   )
@@ -359,6 +411,49 @@ interface LiveEvent {
   ts: number
   type: string
   text: string
+}
+
+function TodoTab({tribeId}: {tribeId: string}) {
+  const sessionId = useLatestSessionId(tribeId)
+  return <TodoPanel tribeId={tribeId} sessionId={sessionId} />
+}
+
+function AgentsTab({tribeId}: {tribeId: string}) {
+  const sessionId = useLatestSessionId(tribeId)
+  return <SubagentTree tribeId={tribeId} sessionId={sessionId} />
+}
+
+function CompactTab({tribeId}: {tribeId: string}) {
+  const sessionId = useLatestSessionId(tribeId)
+  return <CompactPanel tribeId={tribeId} sessionId={sessionId} />
+}
+
+function MemoryTab({tribeId}: {tribeId: string}) {
+  // 从 store 拿当前 tribe 的 cwd
+  const cwd = useAland(s => s.tribes[tribeId]?.vital?.cwd ?? '')
+  return <MemoryView tribeId={tribeId} cwd={cwd} />
+}
+
+// 拿到某个 tribe 的"最新" session id。
+// 约定：sessions 按 timestamp 倒序，第一个就是最新的。
+function useLatestSessionId(tribeId: string): string | null {
+  const [id, setId] = useState<string | null>(null)
+  useEffect(() => {
+    let mounted = true
+    listSessions(tribeId).then(xs => {
+      if (mounted && xs && xs.length > 0) setId(xs[0].id)
+    })
+    const t = setInterval(() => {
+      listSessions(tribeId).then(xs => {
+        if (mounted && xs && xs.length > 0) setId(xs[0].id)
+      })
+    }, 10_000)
+    return () => {
+      mounted = false
+      clearInterval(t)
+    }
+  }, [tribeId])
+  return id
 }
 
 function LiveTailTab({ tribeId }: { tribeId: string }) {

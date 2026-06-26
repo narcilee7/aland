@@ -195,3 +195,77 @@ type SessionToolUse struct {
 	Output string `json:"output,omitempty"`
 	Status string `json:"status,omitempty"` // ok / error
 }
+
+// TodoStatus todo 的状态。
+type TodoStatus string
+
+const (
+	TodoPending    TodoStatus = "pending"
+	TodoInProgress TodoStatus = "in_progress"
+	TodoCompleted  TodoStatus = "completed"
+)
+
+// Todo 来自 Claude Code 的 TodoWrite 工具调用。
+// 每个 session 的最新 TodoWrite 事件决定当前可见的 todo 列表。
+type Todo struct {
+	Content    string     `json:"content"`    // 任务描述
+	Status     TodoStatus `json:"status"`     // pending / in_progress / completed
+	ActiveForm string     `json:"activeForm"` // 进行中时的动词形式
+}
+
+// AgentNode Subagent 树的一个节点。
+//
+// Claude Code 用 Task 工具派生子 agent，每个子 agent 有自己的 session。
+// 树结构：父节点 = 发起 Task 的 assistant 消息；子节点 = 该 Task 派生的 agent。
+type AgentNode struct {
+	ID          string       `json:"id"`          // 子 agent 的 session ID（或 Task 的 tool_use_id）
+	Type        string       `json:"type"`        // agent_type: general-purpose / Explore / Plan 等
+	Description string       `json:"description"` // 用户提供的描述
+	Prompt      string       `json:"prompt,omitempty"`
+	Status      string       `json:"status"`      // running / completed / error / unknown
+	StartedAt   int64        `json:"startedAt"`   // unix ms
+	EndedAt     int64        `json:"endedAt"`     // unix ms；0 表示还在跑
+	MessageCount int         `json:"messageCount"`
+	ToolUseCount int         `json:"toolUseCount"`
+	Children    []*AgentNode `json:"children"`
+}
+
+// CompactEvent 上下文压缩事件。
+type CompactEvent struct {
+	SessionID  string `json:"sessionId"`
+	Trigger    string `json:"trigger"`    // "manual" | "auto"
+	PreTokens  int64  `json:"preTokens"`  // 压缩前的 token 数
+	Timestamp  int64  `json:"timestamp"`  // unix ms
+	At         int64  `json:"at"`         // 同上冗余字段，方便前端
+}
+
+// MemorySource CLAUDE.md 的来源。
+type MemorySource struct {
+	Path  string `json:"path"`  // 绝对路径
+	Scope string `json:"scope"` // "user" | "project" | "local"
+}
+
+// MemorySection CLAUDE.md 的一个章节（# 标题 + 下方正文）。
+type MemorySection struct {
+	Title   string `json:"title"`   // 去掉 # 的标题
+	Level   int    `json:"level"`   // 1-6
+	Content string `json:"content"` // 该章节下的 markdown（不含标题本身）
+	Order   int    `json:"order"`   // 章节顺序（0-indexed）
+}
+
+// MemoryImport @file 导入引用。
+type MemoryImport struct {
+	Path string `json:"path"` // @ 后面的路径
+	Line int    `json:"line"` // 出现在文件的哪一行
+}
+
+// MemoryDoc 解析后的 CLAUDE.md 完整结构。
+type MemoryDoc struct {
+	Source      MemorySource   `json:"source"`
+	Frontmatter string         `json:"frontmatter"` // YAML（不含 --- 包裹符）
+	Sections    []MemorySection `json:"sections"`
+	Imports     []MemoryImport  `json:"imports"`
+	Body        string         `json:"body"`        // 完整正文（含标题）
+	ModifiedAt  int64          `json:"modifiedAt"`  // unix ms
+	SizeBytes   int64          `json:"sizeBytes"`
+}

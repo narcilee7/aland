@@ -90,6 +90,14 @@ type Land struct {
 	stats        map[string]StatsProvider
 	sessionRead  map[string]SessionReader
 	sessionStream map[string]SessionStreamer
+
+	// Sprint 4 新增
+	todos      map[string]TodoLister
+	subagents  map[string]SubagentTreeLister
+	compacts   map[string]CompactLister
+
+	// Sprint 5 新增
+	memories map[string]MemoryReader
 }
 
 // NewLand 构造一片空大陆。
@@ -111,6 +119,10 @@ func NewLand() *Land {
 		stats:         make(map[string]StatsProvider),
 		sessionRead:   make(map[string]SessionReader),
 		sessionStream: make(map[string]SessionStreamer),
+		todos:         make(map[string]TodoLister),
+		subagents:     make(map[string]SubagentTreeLister),
+		compacts:      make(map[string]CompactLister),
+		memories:      make(map[string]MemoryReader),
 	}
 }
 
@@ -176,6 +188,18 @@ func (l *Land) Register(adapter any) error {
 	}
 	if ss, ok := adapter.(SessionStreamer); ok {
 		l.sessionStream[m.ID] = ss
+	}
+	if tl, ok := adapter.(TodoLister); ok {
+		l.todos[m.ID] = tl
+	}
+	if sl, ok := adapter.(SubagentTreeLister); ok {
+		l.subagents[m.ID] = sl
+	}
+	if cl, ok := adapter.(CompactLister); ok {
+		l.compacts[m.ID] = cl
+	}
+	if mr, ok := adapter.(MemoryReader); ok {
+		l.memories[m.ID] = mr
 	}
 	return nil
 }
@@ -277,6 +301,38 @@ func (l *Land) Sessions(id string) (SessionLister, bool) {
 	defer l.mu.RUnlock()
 	s, ok := l.sessions[id]
 	return s, ok
+}
+
+// Todos 取出一个部落的 todo 读取器。
+func (l *Land) Todos(id string) (TodoLister, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	t, ok := l.todos[id]
+	return t, ok
+}
+
+// Subagents 取出一个部落的 subagent 树读取器。
+func (l *Land) Subagents(id string) (SubagentTreeLister, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	s, ok := l.subagents[id]
+	return s, ok
+}
+
+// Compacts 取出一个部落的 compact 事件读取器。
+func (l *Land) Compacts(id string) (CompactLister, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	c, ok := l.compacts[id]
+	return c, ok
+}
+
+// Memories 取出一个部落的 memory 读取器。
+func (l *Land) Memories(id string) (MemoryReader, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	m, ok := l.memories[id]
+	return m, ok
 }
 
 // ConfigParse 取出一个部落的配置结构化解析器。

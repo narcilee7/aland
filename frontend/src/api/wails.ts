@@ -85,6 +85,12 @@ export interface Capabilities {
   sessionTail: boolean
   tokens: boolean
   tokensLive: boolean
+  // Sprint 4 新增
+  todos: boolean
+  subagents: boolean
+  compacts: boolean
+  // Sprint 5 新增
+  memory: boolean
   features: Feature[]
 }
 
@@ -201,6 +207,129 @@ export interface Forge {
   byModel: Record<string, number>
 }
 
+// —— 灵动岛 (Eye) ——
+
+export type EyeMode = 'dormant' | 'active' | 'storm' | 'alert'
+
+export type FlashType =
+  | 'complete'
+  | 'cost_alert'
+  | 'error'
+  | 'conflict'
+  | 'born'
+  | 'death'
+
+export interface Flash {
+  id: string
+  type: FlashType
+  tribe: string
+  content: string
+  createdAt: number
+}
+
+export interface EyeState {
+  mode: EyeMode
+  running: string[]
+  flashing: Flash[]
+  updatedAt: number
+}
+
+// —— Claude Hooks ——
+
+// Claude Code 通过 stdin 传给 hook 的 JSON。
+// 字段是"广覆盖"——所有事件共有 + 各事件特有。
+// 参考 backend/hooks/types.go HookPayload。
+export interface HookPayload {
+  sessionId?: string
+  transcriptPath?: string
+  cwd?: string
+  hookEventName?: string
+  toolName?: string
+  toolInput?: Record<string, unknown>
+  toolResponse?: Record<string, unknown>
+  notificationType?: string
+  message?: string
+  stopReason?: string
+  agentId?: string
+  agentType?: string
+  agentTranscriptPath?: string
+  userPrompt?: string
+  trigger?: string
+  customInstructions?: string
+}
+
+export interface HooksInstallResult {
+  added: string[]
+  skipped: string[]
+}
+
+// Permission 规则集合
+export interface Permissions {
+  allow: string[]
+  deny: string[]
+  ask: string[]
+}
+
+// —— Todos / Subagents / Compact ——
+
+export type TodoStatus = 'pending' | 'in_progress' | 'completed'
+
+export interface Todo {
+  content: string
+  status: TodoStatus
+  activeForm?: string
+}
+
+export interface AgentNode {
+  id: string
+  type: string
+  description: string
+  prompt?: string
+  status: string
+  startedAt: number
+  endedAt: number
+  messageCount: number
+  toolUseCount: number
+  children: AgentNode[]
+}
+
+export interface CompactEvent {
+  sessionId: string
+  trigger: string
+  preTokens: number
+  timestamp: number
+  at: number
+}
+
+// —— CLAUDE.md Memory ——
+
+export interface MemorySource {
+  path: string
+  scope: 'user' | 'project' | 'local'
+}
+
+export interface MemorySection {
+  title: string
+  level: number
+  content: string
+  order: number
+}
+
+export interface MemoryImport {
+  path: string
+  line: number
+}
+
+export interface MemoryDoc {
+  source: MemorySource
+  frontmatter: string
+  sections: MemorySection[]
+  imports: MemoryImport[]
+  body: string
+  modifiedAt: number
+  sizeBytes: number
+}
+
 // —— 类型安全的 Wails 桥 ——
 
 declare global {
@@ -232,6 +361,29 @@ declare global {
           ListPlugins(id: string): Promise<Plugin[]>
           StreamLatestSession(id: string): Promise<void>
           StopLatestSession(id: string): Promise<void>
+
+          // 灵动岛
+          GetEyeState(): Promise<EyeState>
+          ConsumeEyeFlash(id: string): Promise<boolean>
+          ClearEyeFlashes(): Promise<void>
+
+          // Claude Hooks
+          InstallHooks(): Promise<HooksInstallResult>
+          UninstallHooks(): Promise<HooksInstallResult>
+          IsHooksInstalled(): Promise<boolean>
+          HookServerPort(): Promise<number>
+          GetPermissions(): Promise<Permissions>
+          TogglePermission(category: string, rule: string): Promise<Permissions>
+
+          // Todos / Subagents / Compact
+          ListTodos(id: string, sessionId: string): Promise<Todo[]>
+          GetSubagentTree(id: string, sessionId: string): Promise<AgentNode | null>
+          ListCompactEvents(id: string, sessionId: string): Promise<CompactEvent[]>
+
+          // CLAUDE.md Memory
+          FindMemories(id: string, cwd: string): Promise<MemorySource[]>
+          ReadMemory(id: string, path: string): Promise<MemoryDoc | null>
+          SaveMemory(id: string, path: string, body: string, frontmatter: string): Promise<void>
         }
       }
     }
@@ -357,3 +509,158 @@ export const streamLatestSession = (id: string) =>
   wailsAvailable() ? window.go.backend.App.StreamLatestSession(id) : Promise.resolve()
 export const stopLatestSession = (id: string) =>
   wailsAvailable() ? window.go.backend.App.StopLatestSession(id) : Promise.resolve()
+
+// —— Eye 灵动岛 API ——
+
+const DEFAULT_EYE: EyeState = {
+  mode: 'dormant',
+  running: [],
+  flashing: [],
+  updatedAt: 0,
+}
+
+export async function getEyeState(): Promise<EyeState> {
+  if (!wailsAvailable()) return DEFAULT_EYE
+  try {
+    return toCamel<EyeState>(await window.go.backend.App.GetEyeState())
+  } catch {
+    return DEFAULT_EYE
+  }
+}
+
+export async function consumeEyeFlash(id: string): Promise<boolean> {
+  if (!wailsAvailable()) return false
+  try {
+    return await window.go.backend.App.ConsumeEyeFlash(id)
+  } catch {
+    return false
+  }
+}
+
+export async function clearEyeFlashes(): Promise<void> {
+  if (!wailsAvailable()) return
+  try {
+    await window.go.backend.App.ClearEyeFlashes()
+  } catch {
+    /* noop */
+  }
+}
+
+// —— Claude Hooks API ——
+
+export async function installHooks(): Promise<HooksInstallResult | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<HooksInstallResult>(await window.go.backend.App.InstallHooks())
+  } catch {
+    return null
+  }
+}
+
+export async function uninstallHooks(): Promise<HooksInstallResult | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<HooksInstallResult>(await window.go.backend.App.UninstallHooks())
+  } catch {
+    return null
+  }
+}
+
+export async function isHooksInstalled(): Promise<boolean> {
+  if (!wailsAvailable()) return false
+  try {
+    return await window.go.backend.App.IsHooksInstalled()
+  } catch {
+    return false
+  }
+}
+
+export async function hookServerPort(): Promise<number> {
+  if (!wailsAvailable()) return 0
+  try {
+    return await window.go.backend.App.HookServerPort()
+  } catch {
+    return 0
+  }
+}
+
+// —— Permission 规则 API ——
+
+const EMPTY_PERMS: Permissions = {allow: [], deny: [], ask: []}
+
+export async function getPermissions(): Promise<Permissions> {
+  if (!wailsAvailable()) return EMPTY_PERMS
+  try {
+    return toCamel<Permissions>(await window.go.backend.App.GetPermissions())
+  } catch {
+    return EMPTY_PERMS
+  }
+}
+
+export async function togglePermission(category: string, rule: string): Promise<Permissions | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<Permissions>(await window.go.backend.App.TogglePermission(category, rule))
+  } catch {
+    return null
+  }
+}
+
+// —— Todos / Subagents / Compact API ——
+
+export async function listTodos(id: string, sessionId: string): Promise<Todo[]> {
+  if (!wailsAvailable()) return []
+  try {
+    return toCamel<Todo[]>(await window.go.backend.App.ListTodos(id, sessionId))
+  } catch {
+    return []
+  }
+}
+
+export async function getSubagentTree(id: string, sessionId: string): Promise<AgentNode | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<AgentNode>(await window.go.backend.App.GetSubagentTree(id, sessionId))
+  } catch {
+    return null
+  }
+}
+
+export async function listCompactEvents(id: string, sessionId: string): Promise<CompactEvent[]> {
+  if (!wailsAvailable()) return []
+  try {
+    return toCamel<CompactEvent[]>(await window.go.backend.App.ListCompactEvents(id, sessionId))
+  } catch {
+    return []
+  }
+}
+
+// —— Memory API ——
+
+export async function findMemories(id: string, cwd: string): Promise<MemorySource[]> {
+  if (!wailsAvailable()) return []
+  try {
+    return toCamel<MemorySource[]>(await window.go.backend.App.FindMemories(id, cwd))
+  } catch {
+    return []
+  }
+}
+
+export async function readMemory(id: string, path: string): Promise<MemoryDoc | null> {
+  if (!wailsAvailable()) return null
+  try {
+    return toCamel<MemoryDoc>(await window.go.backend.App.ReadMemory(id, path))
+  } catch {
+    return null
+  }
+}
+
+export async function saveMemory(id: string, path: string, body: string, frontmatter: string): Promise<boolean> {
+  if (!wailsAvailable()) return false
+  try {
+    await window.go.backend.App.SaveMemory(id, path, body, frontmatter)
+    return true
+  } catch {
+    return false
+  }
+}

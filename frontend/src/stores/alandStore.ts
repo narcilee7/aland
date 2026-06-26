@@ -1,11 +1,19 @@
 // Aland 全局状态。
-// 视图模式 + 部落数据 + 能力清单 + 选中态 + Spotlight/Forge 开关。
+// 视图模式 + 部落数据 + 能力清单 + 选中态 + Spotlight/Forge/Eye 开关。
 // 用 Zustand 而不是 Redux：够用，且比 Context 更适合高频更新。
 
 import {create} from 'zustand'
-import type {Capabilities, Tribe, TribeMeta} from '../api/wails'
-import {getAllCapabilities, getLand, getTribeMeta, wailsAvailable} from '../api/wails'
-import {onTribeBorn, onTribeDeath, onTribeVital} from '../api/events'
+import type {Capabilities, EyeState, HookPayload, Tribe, TribeMeta} from '../api/wails'
+import {
+  clearEyeFlashes,
+  consumeEyeFlash,
+  getAllCapabilities,
+  getEyeState,
+  getLand,
+  getTribeMeta,
+  wailsAvailable,
+} from '../api/wails'
+import {onEyeFlash, onEyeUpdate, onHook, onTribeBorn, onTribeDeath, onTribeVital} from '../api/events'
 import {logger} from '../lib/logger'
 
 /**
@@ -49,11 +57,21 @@ interface AlandState {
   spotlight: boolean
   forgeOpen: boolean
   matrixOpen: boolean
+  eyeOpen: boolean
 
   // 大陆数据
   tribes: Record<string, Tribe>
   meta: Record<string, TribeMeta>
   caps: Record<string, Capabilities>
+
+  // 灵动岛 (Eye)
+  eye: EyeState
+
+  // Claude Hooks 工具链
+  toolChain: {
+    nodes: ToolNode[]
+    maxNodes: number
+  }
 
   // 状态
   booted: boolean
@@ -67,7 +85,33 @@ interface AlandState {
   setSpotlight: (open: boolean) => void
   setForgeOpen: (open: boolean) => void
   setMatrixOpen: (open: boolean) => void
+  setEyeOpen: (open: boolean) => void
+  consumeFlash: (id: string) => Promise<void>
+  clearFlashes: () => Promise<void>
+  addToolNode: (p: HookPayload) => void
+  clearToolChain: () => void
 }
+
+// ToolNode 是工具链里的一个节点——来自一次 hook 事件。
+export interface ToolNode {
+  id: string
+  event: string // PreToolUse / PostToolUse / Notification / ...
+  toolName?: string
+  toolInput?: Record<string, unknown>
+  toolResponse?: Record<string, unknown>
+  message?: string
+  userPrompt?: string
+  at: number
+}
+
+const initialEye: EyeState = {
+  mode: 'dormant',
+  running: [],
+  flashing: [],
+  updatedAt: 0,
+}
+
+const TOOL_CHAIN_MAX = 100
 
 export const useAland = create<AlandState>((set, get) => ({
   view: 'overlook',
@@ -75,9 +119,12 @@ export const useAland = create<AlandState>((set, get) => ({
   spotlight: false,
   forgeOpen: false,
   matrixOpen: false,
+  eyeOpen: false,
   tribes: {},
   meta: {},
   caps: {},
+  eye: initialEye,
+  toolChain: {nodes: [], maxNodes: TOOL_CHAIN_MAX},
   booted: false,
   booting: false,
 
@@ -124,6 +171,19 @@ export const useAland = create<AlandState>((set, get) => ({
       onTribeVital(snap => set({tribes: snap}))
       onTribeBorn(e => logger.info('tribe born', e))
       onTribeDeath(e => logger.info('tribe death', e))
+
+      // 加载 Eye 初始状态 + 订阅事件
+      const eye = await getEyeState()
+      set({eye})
+      onEyeUpdate(e =>
+        set(s => ({eye: {...s.eye, mode: e.mode, running: e.running, updatedAt: e.updatedAt}})),
+      )
+      onEyeFlash(e =>
+        set(s => ({eye: {...s.eye, flashing: [...s.eye.flashing, e.flash].slice(-16)}})),
+      )
+
+      // 订阅 Claude Hook 事件 → 入工具链
+      onHook(p => get().addToolNode(p))
     } catch (e) {
       logger.error('aland boot failed', e)
       set({booting: false})
@@ -152,5 +212,43 @@ export const useAland = create<AlandState>((set, get) => ({
 
   setMatrixOpen(open: boolean) {
     set({matrixOpen: open})
+  },
+
+  setEyeOpen(open: boolean) {
+    set({eyeOpen: open})
+  },
+
+  async consumeFlash(id: string) {
+    // 本地乐观更新 + 后端确认
+    set(s => ({eye: {...s.eye, flashing: s.eye.flashing.filter(f => f.id !== id)}}))
+    await consumeEyeFlash(id)
+  },
+
+  async clearFlashes() {
+    set(s => ({eye: {...s.eye, flashing: []}}))
+    await clearEyeFlashes()
+  },
+
+  addToolNode(p) {
+    const node: ToolNode = {
+      id: `${p.hookEventName ?? 'ev'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      event: p.hookEventName ?? 'unknown',
+      toolName: p.toolName,
+      toolInput: p.toolInput,
+      toolResponse: p.toolResponse,
+      message: p.message,
+      userPrompt: p.userPrompt,
+      at: Date.now(),
+    }
+    set(s => ({
+      toolChain: {
+        maxNodes: s.toolChain.maxNodes,
+        nodes: [...s.toolChain.nodes, node].slice(-s.toolChain.maxNodes),
+      },
+    }))
+  },
+
+  clearToolChain() {
+    set(s => ({toolChain: {...s.toolChain, nodes: []}}))
   },
 }))

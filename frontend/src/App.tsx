@@ -6,6 +6,7 @@ import { TribeView } from './components/TribeView'
 import { Spotlight } from './components/Spotlight'
 import { Forge } from './components/Forge'
 import { CapabilityMatrix } from './components/CapabilityMatrix'
+import { EyeDialog } from './components/Eye'
 import { Loader2 } from 'lucide-react'
 import { TooltipProvider } from './components/ui'
 
@@ -18,6 +19,8 @@ function App() {
   const setForgeOpen = useAland(s => s.setForgeOpen)
   const matrixOpen = useAland(s => s.matrixOpen)
   const setMatrixOpen = useAland(s => s.setMatrixOpen)
+  const eyeOpen = useAland(s => s.eyeOpen)
+  const setEyeOpen = useAland(s => s.setEyeOpen)
 
   useEffect(() => {
     boot()
@@ -30,6 +33,7 @@ function App() {
         <Overlook
           onOpenForge={() => setForgeOpen(true)}
           onOpenMatrix={() => setMatrixOpen(true)}
+          onOpenEye={() => setEyeOpen(true)}
           onOpenSpotlight={() => useAland.getState().setSpotlight(true)}
         />
 
@@ -54,6 +58,9 @@ function App() {
 
         {/* Capability Matrix */}
         <CapabilityMatrix open={matrixOpen} onOpenChange={setMatrixOpen} />
+
+        {/* Eye 灵动岛 */}
+        <EyeDialog open={eyeOpen} onOpenChange={setEyeOpen} />
 
         {/* Spotlight */}
         <Spotlight />

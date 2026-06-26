@@ -11,6 +11,8 @@ import (
 
 	"github.com/narcilee7/aland/backend/core"
 	"github.com/narcilee7/aland/backend/events"
+	"github.com/narcilee7/aland/backend/eye"
+	"github.com/narcilee7/aland/backend/hooks"
 	"github.com/narcilee7/aland/backend/hotkey"
 	"github.com/narcilee7/aland/backend/infra"
 	"github.com/narcilee7/aland/backend/tribes"
@@ -25,6 +27,12 @@ type App struct {
 	land  *tribes.Land
 	forge *core.Forge
 	eye   *core.EyeState
+
+	// tray 灵动岛菜单栏图标。可能在 macOS 不可用时为 nil。
+	tray *eye.Tray
+
+	// hooks Claude Code hooks HTTP server。可能未启动（settings.json 写失败时）。
+	hookSrv *hooks.Server
 
 	proc *infra.ProcManager
 	fs   *infra.FSWatch
@@ -45,6 +53,19 @@ func NewApp() (*App, error) {
 		eye:   core.NewEyeState(),
 		prev:  make(map[string]int),
 	}, nil
+}
+
+// SetTray 注入灵动岛菜单栏实例。可选——未注入时所有 tray 调用是 no-op。
+// 必须在 Startup 之前调用。
+func (a *App) SetTray(t *eye.Tray) {
+	a.tray = t
+}
+
+// GetWailsContext 返回 Wails 启动时设置的 context。
+// 用于 systray 菜单回调里调用 runtime.Show/Quit。
+// 返回 nil 表示 Wails 还没启动。
+func (a *App) GetWailsContext() context.Context {
+	return a.ctx
 }
 
 // Startup Wails 启动回调。
@@ -68,8 +89,40 @@ func (a *App) Startup(ctx context.Context) {
 		core.Log.Warn("hotkey register failed", "err", err)
 	}
 
+	// 启动 Claude Hooks server + 自动注册到 settings.json
+	a.startHooks(ctx)
+
 	// 周期把生命体征推给前端 + 检测 born/death
 	go a.vitalLoop(ctx)
+}
+
+// startHooks 启动 hooks server 并自动注册到 Claude Code settings.json。
+// 注册失败（如权限、文件锁）不影响 Aland 主流程——只 log warn。
+func (a *App) startHooks(ctx context.Context) {
+	// 1. 注册（幂等）
+	if _, err := hooks.Install(); err != nil {
+		core.Log.Warn("hooks install failed", "err", err)
+		// 注册失败仍然启动 server——方便手动调
+	}
+
+	// 2. 启 server
+	a.hookSrv = hooks.New(func(p hooks.HookPayload) {
+		// 转发到前端 + 触发灵动岛 flash
+		a.em.EmitHook(p)
+		// SessionStop/Stop/PreCompact 这类事件触发 Eye flash
+		switch p.HookEventName {
+		case hooks.EventStop, hooks.EventSubagentStop:
+			f := a.eye.PushFlash(core.FlashComplete, "claude", "claude session stopped")
+			a.em.EmitEyeFlash(f)
+		case hooks.EventNotification:
+			f := a.eye.PushFlash(core.FlashError, "claude", "claude notification: "+p.NotificationMsg)
+			a.em.EmitEyeFlash(f)
+		}
+	})
+	if err := a.hookSrv.Start(ctx); err != nil {
+		core.Log.Warn("hooks server start failed", "err", err)
+		a.hookSrv = nil
+	}
 }
 
 func (a *App) collectConfigPaths() []string {
@@ -96,7 +149,35 @@ func (a *App) vitalLoop(ctx context.Context) {
 			snap := a.land.Snapshot()
 			a.em.EmitTribeVital(snap)
 			a.detectBornDeath(snap)
+			a.refreshEye(snap)
 		}
+	}
+}
+
+// refreshEye 把部落 vital 投影成 TribeVitalInput 喂给 Eye 状态机。
+// 模式或 Running 变化时 EmitEyeUpdate，前端订阅即拿到最新；同时更新菜单栏图标。
+func (a *App) refreshEye(snap map[string]tribes.Tribe) {
+	inputs := make([]core.TribeVitalInput, 0, len(snap))
+	for _, t := range snap {
+		inputs = append(inputs, core.TribeVitalInput{
+			ID:     t.Meta.ID,
+			Status: string(t.Status),
+			PID:    t.Vital.PID,
+			CPU:    t.Vital.CPU,
+		})
+	}
+	if !a.eye.Recompute(inputs) {
+		return
+	}
+	snap2 := a.eye.Snapshot()
+	a.em.EmitEyeUpdate(events.EyeUpdateEvent{
+		Mode:      snap2.Mode,
+		Running:   snap2.Running,
+		UpdatedAt: snap2.UpdatedAt,
+	})
+	// 同步更新菜单栏图标
+	if a.tray != nil {
+		a.tray.SetMode(snap2.Mode)
 	}
 }
 
@@ -108,9 +189,19 @@ func (a *App) detectBornDeath(snap map[string]tribes.Tribe) {
 		cur := t.Vital.PID
 		if !ok && cur > 0 {
 			a.em.EmitTribeBorn(id, cur, t.Meta.Name)
+			flash := a.eye.PushFlash(core.FlashBorn, id, fmt.Sprintf("%s 启动 · pid %d", t.Meta.Name, cur))
+			a.em.EmitEyeFlash(flash)
+			if a.tray != nil {
+				a.tray.ShowFlash(core.FlashBorn, 800)
+			}
 		}
 		if ok && prev > 0 && cur == 0 {
 			a.em.EmitTribeDeath(id, prev, t.Meta.Name)
+			flash := a.eye.PushFlash(core.FlashDeath, id, fmt.Sprintf("%s 已停止", t.Meta.Name))
+			a.em.EmitEyeFlash(flash)
+			if a.tray != nil {
+				a.tray.ShowFlash(core.FlashDeath, 800)
+			}
 		}
 		a.prev[id] = cur
 	}
@@ -362,4 +453,126 @@ func (a *App) WriteTribeConfig(id string, dna tribes.ConfigDNA) error {
 	}
 	core.Log.Info("write tribe config", "tribe", id, "surface", len(dna.Surface), "middle", len(dna.Middle), "deep", len(dna.Deep))
 	return w.WriteConfig(dna)
+}
+
+// ===== Eye 灵动岛 =====
+
+// GetEyeState 返回当前 Eye 完整快照。
+// 前端在挂载时调用一次拿到初始 Mode/Running/Flashing，
+// 之后通过订阅 eye:update / eye:flash 增量更新。
+func (a *App) GetEyeState() core.EyeState {
+	return a.eye.Snapshot()
+}
+
+// ConsumeEyeFlash 把指定 flash 标记为已读（从队列移除）。
+// 前端在用户点击/关闭一条通知时调用。
+func (a *App) ConsumeEyeFlash(id string) bool {
+	return a.eye.ConsumeFlash(id)
+}
+
+// ClearEyeFlashes 清空全部 flash（前端"全部已读"按钮）。
+func (a *App) ClearEyeFlashes() {
+	a.eye.ClearFlashes()
+}
+
+// ===== Claude Hooks =====
+
+// InstallHooks 把 Aland 注册到 ~/.claude/settings.json 的 hooks 字段。
+// 幂等。已经注册过的事件不会重复添加。
+func (a *App) InstallHooks() (*hooks.InstallResult, error) {
+	return hooks.Install()
+}
+
+// UninstallHooks 从 settings.json 移除 Aland 注册的 hook 条目。
+// 保留用户自定义的其他 hooks。
+func (a *App) UninstallHooks() (*hooks.InstallResult, error) {
+	res, err := hooks.Uninstall()
+	// 顺便关停 server
+	if a.hookSrv != nil {
+		_ = a.hookSrv.Stop()
+		a.hookSrv = nil
+	}
+	return res, err
+}
+
+// IsHooksInstalled 检查 settings.json 是否已经有 Aland 注册（不修改文件）。
+func (a *App) IsHooksInstalled() (bool, error) {
+	return hooks.IsInstalled()
+}
+
+// HookServerPort 返回当前 hook server 监听的端口。
+// 前端调试时显示。
+func (a *App) HookServerPort() int {
+	if a.hookSrv == nil {
+		return 0
+	}
+	return a.hookSrv.Port()
+}
+
+// GetPermissions 读取 ~/.claude/settings.json 的 permissions 字段。
+func (a *App) GetPermissions() (hooks.Permissions, error) {
+	return hooks.ReadPermissions()
+}
+
+// TogglePermission 切换一条规则在某类（allow/deny/ask）下的存在状态。
+func (a *App) TogglePermission(category, rule string) (hooks.Permissions, error) {
+	return hooks.TogglePermission(category, rule)
+}
+
+// ===== Todos / Subagents / Compact =====
+
+// ListTodos 读取某 session 的最新 todo 快照。
+func (a *App) ListTodos(id, sessionID string) ([]tribes.Todo, error) {
+	tl, ok := a.land.Todos(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no todo lister", id)
+	}
+	return tl.ListTodos(sessionID)
+}
+
+// GetSubagentTree 读取某 session 的子 agent 树。
+func (a *App) GetSubagentTree(id, sessionID string) (*tribes.AgentNode, error) {
+	sl, ok := a.land.Subagents(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no subagent lister", id)
+	}
+	return sl.GetSubagentTree(sessionID)
+}
+
+// ListCompactEvents 列出 session 的 compact 事件。
+func (a *App) ListCompactEvents(id, sessionID string) ([]tribes.CompactEvent, error) {
+	cl, ok := a.land.Compacts(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no compact lister", id)
+	}
+	return cl.ListCompactEvents(sessionID)
+}
+
+// ===== CLAUDE.md Memory =====
+
+// FindMemories 探测所有可用的 CLAUDE.md（project + user global）。
+func (a *App) FindMemories(id, cwd string) ([]tribes.MemorySource, error) {
+	mr, ok := a.land.Memories(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no memory reader", id)
+	}
+	return mr.FindMemories(cwd)
+}
+
+// ReadMemory 解析单个 CLAUDE.md。
+func (a *App) ReadMemory(id, path string) (*tribes.MemoryDoc, error) {
+	mr, ok := a.land.Memories(id)
+	if !ok {
+		return nil, fmt.Errorf("tribe %s has no memory reader", id)
+	}
+	return mr.ReadMemory(path)
+}
+
+// SaveMemory 写回 CLAUDE.md。带 backup。
+func (a *App) SaveMemory(id, path, body, frontmatter string) error {
+	mr, ok := a.land.Memories(id)
+	if !ok {
+		return fmt.Errorf("tribe %s has no memory reader", id)
+	}
+	return mr.SaveMemory(path, body, frontmatter)
 }

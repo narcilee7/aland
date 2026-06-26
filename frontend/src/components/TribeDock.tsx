@@ -5,16 +5,17 @@
 import {useState} from 'react'
 import {useAland} from '../stores/alandStore'
 import {Badge} from './ui'
-import {ArrowRight, ChevronRight, MapPin} from 'lucide-react'
+import {ArrowRight, ChevronRight, Eye, MapPin} from 'lucide-react'
 import type {Tribe} from '../api/wails'
 
 interface TribeDockProps {
   onOpenForge?: () => void
   onOpenMatrix?: () => void
   onOpenSpotlight?: () => void
+  onOpenEye?: () => void
 }
 
-export function TribeDock({onOpenForge, onOpenMatrix, onOpenSpotlight}: TribeDockProps) {
+export function TribeDock({onOpenForge, onOpenMatrix, onOpenSpotlight, onOpenEye}: TribeDockProps) {
   const [collapsed, setCollapsed] = useState(false)
   const tribes = useAland(s => s.tribes)
   const meta = useAland(s => s.meta)
@@ -64,6 +65,7 @@ export function TribeDock({onOpenForge, onOpenMatrix, onOpenSpotlight}: TribeDoc
               Matrix
             </button>
           )}
+          {onOpenEye && <EyeDockButton onClick={onOpenEye} />}
         </div>
         {/* 折叠按钮 */}
         <button
@@ -162,6 +164,37 @@ function TribeCard({tribe, onEnter}: {tribe: Tribe | undefined; onEnter: () => v
           </>
         )}
       </div>
+    </button>
+  )
+}
+
+// 灵动岛快捷按钮——mode 颜色 + 通知数小点。
+function EyeDockButton({onClick}: {onClick: () => void}) {
+  const eye = useAland(s => s.eye)
+  const flashes = eye.flashing.length
+  const dot =
+    eye.mode === 'storm'
+      ? 'bg-forge-amber'
+      : eye.mode === 'alert'
+        ? 'bg-forge-red'
+        : eye.mode === 'active'
+          ? 'bg-forge-green'
+          : 'bg-ink-faint'
+
+  return (
+    <button
+      onClick={onClick}
+      className="flex-1 relative px-2 py-1.5 rounded text-[10px] font-mono uppercase tracking-wider text-ink-dim hover:text-ink hover:bg-white/5 transition-colors inline-flex items-center justify-center gap-1"
+      title={`灵动岛 · ${eye.mode}${flashes ? ` · ${flashes} notifications` : ''}`}
+    >
+      <Eye className="h-3 w-3" />
+      Eye
+      {flashes > 0 && (
+        <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-forge-red text-[8px] font-mono text-white inline-flex items-center justify-center">
+          {flashes}
+        </span>
+      )}
+      <span className={`absolute bottom-1 right-1 h-1 w-1 rounded-full ${dot}`} />
     </button>
   )
 }
